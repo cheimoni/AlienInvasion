@@ -37,7 +37,7 @@ jobs:
 
           # Call OpenRouter / ZAI GLM
           payload = json.dumps({
-              "model": "thudm/glm-4-32b",
+              "model": "google/gemini-2.0-flash-exp:free",
               "messages": [
                   {
                       "role": "system",
