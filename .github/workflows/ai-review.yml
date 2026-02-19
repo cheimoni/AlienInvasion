@@ -1,4 +1,4 @@
-name: AI Game Review (ZAI GLM)
+name: AI Game Review (Vercel AI Gateway)
 
 on:
   push:
@@ -18,10 +18,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Ask ZAI GLM-5 for review
+      - name: Ask AI for game review
         id: ai_review
         env:
-          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
         run: |
           python3 << 'PYEOF'
           import os, json, urllib.request
@@ -35,9 +35,9 @@ jobs:
               except:
                   pass
 
-          # Call OpenRouter / ZAI GLM
+          # Call Vercel AI Gateway
           payload = json.dumps({
-              "model": "mistralai/mistral-7b-instruct:free",
+              "model": "anthropic/claude-haiku-4-5-20251001",
               "messages": [
                   {
                       "role": "system",
@@ -52,10 +52,10 @@ jobs:
           }).encode()
 
           req = urllib.request.Request(
-              "https://openrouter.ai/api/v1/chat/completions",
+              "https://ai-gateway.vercel.sh/v1/chat/completions",
               data=payload,
               headers={
-                  "Authorization": f"Bearer {os.environ['ZAI_API_KEY']}",
+                  "Authorization": f"Bearer {os.environ['AI_GATEWAY_API_KEY']}",
                   "Content-Type": "application/json"
               }
           )
@@ -92,6 +92,6 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `🤖 AI Review [${sha}] - ${date}`,
-              body: `## ZAI GLM-5 Game Review\n\nAutomatic review triggered by push \`${sha}\`.\n\n---\n\n${suggestions}\n\n---\n*Generated automatically by AI Review workflow*`,
+              body: `## 🤖 Vercel AI Gateway Review\n\nAutomatic review triggered by push \`${sha}\`.\n\n---\n\n${suggestions}\n\n---\n*Generated automatically via Vercel AI Gateway (claude-haiku)*`,
               labels: ['ai-review']
             });
