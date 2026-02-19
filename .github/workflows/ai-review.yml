@@ -37,7 +37,7 @@ jobs:
 
           # Call OpenRouter / ZAI GLM
           payload = json.dumps({
-              "model": "deepseek/deepseek-r1:free",
+              "model": "mistralai/mistral-7b-instruct:free",
               "messages": [
                   {
                       "role": "system",
