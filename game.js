@@ -77,6 +77,18 @@ var sprites = {
  bg_star_3: { sx: 0, sy: 0, w: 140, h: 140, frames: 1, file: 'images/remove_background_keep_star_only_with_transparent-1771438025866.png' },
  bg_star_4: { sx: 0, sy: 0, w: 150, h: 150, frames: 1, file: 'images/remove_background_keep_star_only_with_transparent-1771438033273.png' },
 
+ // === Kenney CC0 assets ===
+ kenney_meteor_1: { sx: 0, sy: 0, w: 101, h: 84,  frames: 1, file: 'images/kenney_meteorBrown1.png' },
+ kenney_meteor_2: { sx: 0, sy: 0, w: 120, h: 98,  frames: 1, file: 'images/kenney_meteorBrown2.png' },
+ kenney_meteor_3: { sx: 0, sy: 0, w: 89,  h: 82,  frames: 1, file: 'images/kenney_meteorGrey1.png' },
+ kenney_meteor_4: { sx: 0, sy: 0, w: 98,  h: 96,  frames: 1, file: 'images/kenney_meteorGrey2.png' },
+ kenney_ufo_blue:  { sx: 0, sy: 0, w: 91, h: 91,  frames: 1, file: 'images/kenney_ufoBlue.png' },
+ kenney_ufo_red:   { sx: 0, sy: 0, w: 91, h: 91,  frames: 1, file: 'images/kenney_ufoRed.png' },
+ kenney_ufo_green: { sx: 0, sy: 0, w: 91, h: 91,  frames: 1, file: 'images/kenney_ufoGreen.png' },
+ kenney_star_1: { sx: 0, sy: 0, w: 30,  h: 30,  frames: 1, file: 'images/kenney_star1.png' },
+ kenney_star_2: { sx: 0, sy: 0, w: 30,  h: 30,  frames: 1, file: 'images/kenney_star2.png' },
+ kenney_star_3: { sx: 0, sy: 0, w: 30,  h: 30,  frames: 1, file: 'images/kenney_star3.png' },
+
  // Saturn (BIG!)
  bg_saturn_1: { sx: 0, sy: 0, w: 400, h: 230, frames: 1, file: 'images/remove_background_keep_Saturn_planet_with_rings_o-1771438156492.png' },
  bg_saturn_2: { sx: 0, sy: 0, w: 450, h: 260, frames: 1, file: 'images/remove_background_keep_Saturn_planet_with_rings_o-1771438160539.png' },
@@ -1072,8 +1084,8 @@ var startGame = function() {
   if(ua.match(/android/)) {
     Game.setBoard(0,new Starfield(50,0.6,100,true));
   } else {
-    Game.setBoard(0,new Starfield(20,0.4,100,true));
-    Game.setBoard(1,new Starfield(50,0.6,100));
+    Game.setBoard(0,new Starfield(20,0.5,350,true));
+    Game.setBoard(1,new Starfield(50,0.7,280));
     Game.setBoard(2,new BackgroundObjectsSystem()); // Planets, asteroids, stars
     Game.setBoard(2.5,new EnergyParticlesSystem()); // Floating energy particles
   }
@@ -1329,9 +1341,10 @@ var Starfield = function(speed,opacity,numStars,clear) {
   // Coloured stars of varied sizes (dimmer for night effect)
   var starColors = ['#FFFFFF','#AACCFF','#FFEEDD','#AAFFEE','#FFDDCC','#CCDDFF'];
   for(var i=0;i<numStars;i++) {
-    starCtx.globalAlpha = opacity * (0.25 + Math.random() * 0.50); // Dimmer stars
+    starCtx.globalAlpha = opacity * (0.3 + Math.random() * 0.7);
     starCtx.fillStyle = starColors[Math.floor(Math.random() * starColors.length)];
-    var sz = Math.random() < 0.03 ? 2 : 1; // Smaller stars
+    var rnd = Math.random();
+    var sz = rnd < 0.05 ? 3 : rnd < 0.2 ? 2 : 1; // Μεγαλύτερα αστέρια
     starCtx.fillRect(Math.floor(Math.random()*stars.width),
                      Math.floor(Math.random()*stars.height),
                      sz, sz);
@@ -1471,15 +1484,18 @@ var BackgroundObjectsSystem = function() {
 
   // Background sprite types - ONLY planets, asteroids, stars (NO Saturn, NO clouds, NO motherships)
   var planetTypes = ['bg_planet_1', 'bg_planet_2', 'bg_planet_3', 'bg_planet_4', 'bg_planet_5', 'bg_planet_6'];
-  var asteroidTypes = ['bg_asteroid_1', 'bg_asteroid_2', 'bg_asteroid_3', 'bg_asteroid_4', 'bg_asteroid_5'];
-  var starTypes = ['bg_star_1', 'bg_star_2', 'bg_star_3', 'bg_star_4'];
-  // REMOVED: Saturn (saturnTypes) - user doesn't want it
+  var asteroidTypes = ['bg_asteroid_1', 'bg_asteroid_2', 'bg_asteroid_3', 'bg_asteroid_4', 'bg_asteroid_5',
+                       'kenney_meteor_1', 'kenney_meteor_2', 'kenney_meteor_3', 'kenney_meteor_4'];
+  var starTypes = ['bg_star_1', 'bg_star_2', 'bg_star_3', 'bg_star_4',
+                   'kenney_star_1', 'kenney_star_2', 'kenney_star_3'];
+  var ufoTypes = ['kenney_ufo_blue', 'kenney_ufo_red', 'kenney_ufo_green'];
 
-  // ΛΙΓΑ αντικείμενα - μόνο πλανήτες, αστεροειδείς, αστέρια (με περιστροφή γύρω από τον εαυτό τους)
+  // Background objects — πλανήτες, αστεροειδείς, αστέρια, UFO
   var allTypes = [
-    { types: planetTypes, count: 3, scale: 1.2, opacity: 0.7, canRotate: true },    // Πλανήτες - περιστροφή
-    { types: asteroidTypes, count: 3, scale: 1.0, opacity: 0.6, canRotate: true },  // Πετρώματα - περιστροφή
-    { types: starTypes, count: 4, scale: 1.5, opacity: 0.9, canRotate: true, canSparkle: true }  // Αστέρια - περιστροφή + λαμπύρισμα
+    { types: planetTypes,   count: 3,  scale: 1.2, opacity: 0.7, canRotate: true },
+    { types: asteroidTypes, count: 5,  scale: 1.1, opacity: 0.7, canRotate: true },
+    { types: starTypes,     count: 7,  scale: 2.0, opacity: 0.95, canRotate: true, canSparkle: true },
+    { types: ufoTypes,      count: 2,  scale: 0.8, opacity: 0.5, canRotate: false }
   ];
 
   for(var g = 0; g < allTypes.length; g++) {
@@ -1497,8 +1513,8 @@ var BackgroundObjectsSystem = function() {
       var isZooming = true;
       var startScale = 0.05 + Math.random() * 0.1; // Always start very small (0.05-0.15)
 
-      // ΑΡΓΗ κίνηση: 5-15 pixels/second
-      var speed = 5 + Math.random() * 10;
+      // ΑΡΓΗ κίνηση: 1-4 pixels/second (smooth & cinematic)
+      var speed = 1 + Math.random() * 3;
 
       // Random direction
       var dir = Math.floor(Math.random() * 4); // 0=left->right, 1=right->left, 2=up->down, 3=down->up
@@ -1546,7 +1562,7 @@ var BackgroundObjectsSystem = function() {
         direction: dir,
         speed: speed,
         rotation: 0,
-        rotationSpeed: group.canRotate ? (0.5 + Math.random() * 1.5) * (Math.random() < 0.5 ? 1 : -1) : 0, // Πιο γρήγορη περιστροφή γύρω από τον εαυτό τους
+        rotationSpeed: group.canRotate ? (0.03 + Math.random() * 0.08) * (Math.random() < 0.5 ? 1 : -1) : 0, // Πολύ αργή smooth περιστροφή
         growSpeed: 0.15 + Math.random() * 0.1 // Αργή αύξηση
       });
     }
