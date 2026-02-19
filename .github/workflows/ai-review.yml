@@ -18,42 +18,64 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Read game files
-        id: read_files
-        run: |
-          CODE=$(cat engine.js game.js index.html base.css 2>/dev/null | head -c 8000)
-          echo "code<<EOF" >> $GITHUB_OUTPUT
-          echo "$CODE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Ask ZAI GLM-5 for review
         id: ai_review
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
         run: |
-          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $ZAI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d '{
+          python3 << 'PYEOF'
+          import os, json, urllib.request
+
+          # Read game files
+          code = ""
+          for fname in ["engine.js", "game.js", "index.html", "base.css"]:
+              try:
+                  with open(fname, "r", encoding="utf-8", errors="ignore") as f:
+                      code += f"\n\n// === {fname} ===\n" + f.read(3000)
+              except:
+                  pass
+
+          # Call OpenRouter / ZAI GLM
+          payload = json.dumps({
               "model": "thudm/glm-4-32b",
               "messages": [
-                {
-                  "role": "system",
-                  "content": "You are an expert HTML5 game developer. Analyze the AlienInvasion game code and give 3-5 specific, actionable improvement suggestions. Focus on gameplay, performance, and visual effects. Be concise and practical."
-                },
-                {
-                  "role": "user",
-                  "content": "Review this AlienInvasion HTML5 Canvas game code and suggest improvements:\n\n${{ steps.read_files.outputs.code }}"
-                }
+                  {
+                      "role": "system",
+                      "content": "You are an expert HTML5 game developer. Analyze the AlienInvasion game code and give 3-5 specific, actionable improvement suggestions. Focus on gameplay, performance, and visual effects. Be concise and practical."
+                  },
+                  {
+                      "role": "user",
+                      "content": f"Review this AlienInvasion HTML5 Canvas game and suggest improvements:\n{code}"
+                  }
               ],
               "max_tokens": 1000
-            }')
+          }).encode()
 
-          SUGGESTIONS=$(echo "$RESPONSE" | python3 -c "import sys,json; data=json.load(sys.stdin); print(data['choices'][0]['message']['content'])" 2>/dev/null || echo "Could not parse AI response")
+          req = urllib.request.Request(
+              "https://openrouter.ai/api/v1/chat/completions",
+              data=payload,
+              headers={
+                  "Authorization": f"Bearer {os.environ['ZAI_API_KEY']}",
+                  "Content-Type": "application/json"
+              }
+          )
 
-          echo "suggestions<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUGGESTIONS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          try:
+              with urllib.request.urlopen(req, timeout=60) as resp:
+                  data = json.loads(resp.read())
+                  suggestions = data["choices"][0]["message"]["content"]
+          except Exception as e:
+              suggestions = f"API Error: {e}"
+
+          # Write to GitHub output
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("suggestions<<SUGGESTIONS_EOF\n")
+              f.write(suggestions + "\n")
+              f.write("SUGGESTIONS_EOF\n")
+
+          print("AI Review complete!")
+          print(suggestions[:500])
+          PYEOF
 
       - name: Create GitHub Issue with AI feedback
         uses: actions/github-script@v7
