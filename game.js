@@ -1513,8 +1513,8 @@ var BackgroundObjectsSystem = function() {
       var isZooming = true;
       var startScale = 0.05 + Math.random() * 0.1; // Always start very small (0.05-0.15)
 
-      // ΑΡΓΗ κίνηση: 1-4 pixels/second (smooth & cinematic)
-      var speed = 1 + Math.random() * 3;
+      // Βάση ταχύτητας: πολύ αργά στο level 1, +1 ανά level
+      var baseSpeed = 0.1 + Math.random() * 0.3; // 0.1-0.4 px/sec στο level 1
 
       // Random direction
       var dir = Math.floor(Math.random() * 4); // 0=left->right, 1=right->left, 2=up->down, 3=down->up
@@ -1560,7 +1560,7 @@ var BackgroundObjectsSystem = function() {
         sparklePhase: Math.random() * Math.PI * 2, // Random start phase
         sparkleSpeed: 2 + Math.random() * 3, // Sparkle speed
         direction: dir,
-        speed: speed,
+        baseSpeed: baseSpeed,
         rotation: 0,
         rotationSpeed: group.canRotate ? (0.03 + Math.random() * 0.08) * (Math.random() < 0.5 ? 1 : -1) : 0, // Πολύ αργή smooth περιστροφή
         growSpeed: 0.15 + Math.random() * 0.1 // Αργή αύξηση
@@ -1585,11 +1585,14 @@ BackgroundObjectsSystem.prototype.step = function(dt) {
       if(obj.scale > obj.targetScale) obj.scale = obj.targetScale;
     }
 
-    // ΑΡΓΗ κίνηση
-    if(obj.direction === 0) obj.x += obj.speed * dt; // left->right
-    else if(obj.direction === 1) obj.x -= obj.speed * dt; // right->left
-    else if(obj.direction === 2) obj.y += obj.speed * dt; // up->down
-    else obj.y -= obj.speed * dt; // down->up
+    // Ταχύτητα: βάση + (level-1), με breathing room στα level 60-62
+    var lvl = currentLevel;
+    var normalSpeed = obj.baseSpeed + (lvl - 1);
+    var dynSpeed = (lvl >= 60 && lvl <= 62) ? normalSpeed * 0.10 : normalSpeed;
+    if(obj.direction === 0) obj.x += dynSpeed * dt; // left->right
+    else if(obj.direction === 1) obj.x -= dynSpeed * dt; // right->left
+    else if(obj.direction === 2) obj.y += dynSpeed * dt; // up->down
+    else obj.y -= dynSpeed * dt; // down->up
 
     // Self-rotation (μόνο αν επιτρέπεται)
     if(obj.rotationSpeed !== 0) {
