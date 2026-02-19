@@ -1096,7 +1096,7 @@ var startGame = function() {
 
 // Current level tracker
 var currentLevel = 1;
-var maxLevel = 5;
+var maxLevel = 100;
 var infiniteLoopMode = false;
 
 var activateInfiniteLoop = function() {
@@ -1585,10 +1585,15 @@ BackgroundObjectsSystem.prototype.step = function(dt) {
       if(obj.scale > obj.targetScale) obj.scale = obj.targetScale;
     }
 
-    // Ταχύτητα: βάση + (level-1), με breathing room στα level 60-62
+    // Ταχύτητα: βάση + (level-1)
+    // Breathing room (10% speed) στα: 60-62, 70-72, 80-82, 90-92
     var lvl = currentLevel;
     var normalSpeed = obj.baseSpeed + (lvl - 1);
-    var dynSpeed = (lvl >= 60 && lvl <= 62) ? normalSpeed * 0.10 : normalSpeed;
+    var isBreathing = (lvl >= 60 && lvl <= 62) ||
+                      (lvl >= 70 && lvl <= 72) ||
+                      (lvl >= 80 && lvl <= 82) ||
+                      (lvl >= 90 && lvl <= 92);
+    var dynSpeed = isBreathing ? normalSpeed * 0.10 : normalSpeed;
     if(obj.direction === 0) obj.x += dynSpeed * dt; // left->right
     else if(obj.direction === 1) obj.x -= dynSpeed * dt; // right->left
     else if(obj.direction === 2) obj.y += dynSpeed * dt; // up->down
