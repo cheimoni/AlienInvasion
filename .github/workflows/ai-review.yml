@@ -1,4 +1,4 @@
-name: AI Game Review (Vercel AI Gateway)
+name: AI Game Review (Groq)
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
       - name: Ask AI for game review
         id: ai_review
         env:
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           python3 << 'PYEOF'
           import os, json, urllib.request
@@ -37,7 +37,7 @@ jobs:
 
           # Call Vercel AI Gateway
           payload = json.dumps({
-              "model": "anthropic/claude-haiku-4-5-20251001",
+              "model": "llama-3.3-70b-versatile",
               "messages": [
                   {
                       "role": "system",
@@ -52,10 +52,10 @@ jobs:
           }).encode()
 
           req = urllib.request.Request(
-              "https://ai-gateway.vercel.sh/v1/chat/completions",
+              "https://api.groq.com/openai/v1/chat/completions",
               data=payload,
               headers={
-                  "Authorization": f"Bearer {os.environ['AI_GATEWAY_API_KEY']}",
+                  "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}",
                   "Content-Type": "application/json"
               }
           )
@@ -92,6 +92,6 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `🤖 AI Review [${sha}] - ${date}`,
-              body: `## 🤖 Vercel AI Gateway Review\n\nAutomatic review triggered by push \`${sha}\`.\n\n---\n\n${suggestions}\n\n---\n*Generated automatically via Vercel AI Gateway (claude-haiku)*`,
+              body: `## 🤖 Vercel AI Gateway Review\n\nAutomatic review triggered by push \`${sha}\`.\n\n---\n\n${suggestions}\n\n---\n*Generated automatically via Groq (llama-3.3-70b)*`,
               labels: ['ai-review']
             });
