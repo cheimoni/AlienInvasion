@@ -1,4 +1,4 @@
-name: AI Game Review (Groq)
+name: AI Game Review (GitHub Models)
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
       - name: Ask AI for game review
         id: ai_review
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 << 'PYEOF'
           import os, json, urllib.request
@@ -37,7 +37,7 @@ jobs:
 
           # Call Vercel AI Gateway
           payload = json.dumps({
-              "model": "llama-3.3-70b-versatile",
+              "model": "gpt-4o-mini",
               "messages": [
                   {
                       "role": "system",
@@ -52,10 +52,10 @@ jobs:
           }).encode()
 
           req = urllib.request.Request(
-              "https://api.groq.com/openai/v1/chat/completions",
+              "https://models.inference.ai.azure.com/chat/completions",
               data=payload,
               headers={
-                  "Authorization": f"Bearer {os.environ['GROQ_API_KEY']}",
+                  "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
                   "Content-Type": "application/json"
               }
           )
@@ -92,6 +92,6 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `🤖 AI Review [${sha}] - ${date}`,
-              body: `## 🤖 Vercel AI Gateway Review\n\nAutomatic review triggered by push \`${sha}\`.\n\n---\n\n${suggestions}\n\n---\n*Generated automatically via Groq (llama-3.3-70b)*`,
+              body: `## 🤖 Vercel AI Gateway Review\n\nAutomatic review triggered by push \`${sha}\`.\n\n---\n\n${suggestions}\n\n---\n*Generated automatically via GitHub Models (gpt-4o-mini)*`,
               labels: ['ai-review']
             });
