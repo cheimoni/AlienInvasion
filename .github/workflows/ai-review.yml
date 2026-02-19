@@ -13,121 +13,73 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
+      contents: read
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Ask AI for game review
+      - name: Ask AI and create issue
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          GH_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 << 'PYEOF'
-          import os, json, urllib.request
+          # Read game code (first 6000 chars total)
+          CODE=$(head -c 2000 engine.js 2>/dev/null)
+          CODE="$CODE $(head -c 2000 game.js 2>/dev/null)"
+          CODE="$CODE $(head -c 2000 index.html 2>/dev/null)"
 
-          # Read game files
-          code = ""
-          for fname in ["engine.js", "game.js", "index.html", "base.css"]:
-              try:
-                  with open(fname, "r", encoding="utf-8", errors="ignore") as f:
-                      code += f"\n\n// === {fname} ===\n" + f.read(3000)
-              except:
-                  pass
+          SHA="${{ github.sha }}"
+          SHORT_SHA="${SHA:0:7}"
+          TODAY=$(date +%Y-%m-%d)
 
-          # Call GitHub Models API
+          # Save code to file to avoid escaping issues
+          echo "$CODE" > /tmp/game_code.txt
+
+          # Build JSON payload using Python
+          SUGGESTIONS=$(python3 -c "
+          import json, urllib.request, os, sys
+
+          with open('/tmp/game_code.txt') as f:
+              code = f.read()
+
           payload = json.dumps({
-              "model": "gpt-4o-mini",
-              "messages": [
-                  {
-                      "role": "system",
-                      "content": "You are an expert HTML5 game developer. Analyze the AlienInvasion game code and give 3-5 specific, actionable improvement suggestions. Focus on gameplay, performance, and visual effects. Be concise and practical."
-                  },
-                  {
-                      "role": "user",
-                      "content": f"Review this AlienInvasion HTML5 Canvas game and suggest improvements:\n{code}"
-                  }
+              'model': 'gpt-4o-mini',
+              'messages': [
+                  {'role': 'system', 'content': 'You are an HTML5 game developer. Give 3-5 specific improvement suggestions for this AlienInvasion canvas game. Be concise.'},
+                  {'role': 'user', 'content': 'Suggest improvements for this game code:\n' + code[:5000]}
               ],
-              "max_tokens": 1000
+              'max_tokens': 800
           }).encode()
 
           req = urllib.request.Request(
-              "https://models.inference.ai.azure.com/chat/completions",
+              'https://models.inference.ai.azure.com/chat/completions',
               data=payload,
               headers={
-                  "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
-                  "Content-Type": "application/json"
+                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                  'Content-Type': 'application/json'
               }
           )
-
           try:
-              with urllib.request.urlopen(req, timeout=60) as resp:
-                  data = json.loads(resp.read())
-                  suggestions = data["choices"][0]["message"]["content"]
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  data = json.loads(r.read())
+                  print(data['choices'][0]['message']['content'])
           except urllib.error.HTTPError as e:
-              body = e.read().decode()
-              suggestions = f"API Error {e.code}: {e.reason}\n\nResponse: {body}"
+              print('API Error', e.code, e.reason, e.read().decode()[:300])
           except Exception as e:
-              suggestions = f"API Error: {e}"
+              print('Error:', e)
+          ")
 
-          # Save to file to avoid shell escaping issues
-          with open("/tmp/ai_suggestions.txt", "w") as f:
-              f.write(suggestions)
+          # Create GitHub Issue using gh CLI
+          gh issue create \
+            --title "AI Review [$SHORT_SHA] - $TODAY" \
+            --body "## AI Game Review
 
-          print("AI Review complete!")
-          print(suggestions[:500])
-          PYEOF
-
-      - name: Create GitHub Issue with AI feedback
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_SHA: ${{ github.sha }}
-        run: |
-          python3 << 'PYEOF'
-          import os, json, urllib.request
-
-          sha = os.environ['GH_SHA'][:7]
-          repo = os.environ['GITHUB_REPOSITORY']
-          token = os.environ['GITHUB_TOKEN']
-
-          try:
-              with open("/tmp/ai_suggestions.txt") as f:
-                  suggestions = f.read()
-          except:
-              suggestions = "Could not read AI suggestions."
-
-          from datetime import date
-          today = date.today().isoformat()
-
-          body = f"""## AI Game Review
-
-Automatic review triggered by push `{sha}`.
+Triggered by push \`$SHORT_SHA\`.
 
 ---
 
-{suggestions}
+$SUGGESTIONS
 
 ---
-*Generated automatically via GitHub Models (gpt-4o-mini)*"""
-
-          payload = json.dumps({
-              "title": f"AI Review [{sha}] - {today}",
-              "body": body,
-              "labels": ["ai-review"]
-          }).encode()
-
-          req = urllib.request.Request(
-              f"https://api.github.com/repos/{repo}/issues",
-              data=payload,
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Content-Type": "application/json",
-                  "Accept": "application/vnd.github+json"
-              }
-          )
-
-          with urllib.request.urlopen(req) as resp:
-              result = json.loads(resp.read())
-              print(f"Issue created: {result['html_url']}")
-          PYEOF
+*Via GitHub Models (gpt-4o-mini)*" \
+            --label "ai-review"
