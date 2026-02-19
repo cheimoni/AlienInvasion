@@ -19,9 +19,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Ask AI for game review
-        id: ai_review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
         run: |
           python3 << 'PYEOF'
           import os, json, urllib.request
@@ -35,7 +36,7 @@ jobs:
               except:
                   pass
 
-          # Call Vercel AI Gateway
+          # Call GitHub Models API
           payload = json.dumps({
               "model": "gpt-4o-mini",
               "messages": [
@@ -70,28 +71,63 @@ jobs:
           except Exception as e:
               suggestions = f"API Error: {e}"
 
-          # Write to GitHub output
-          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write("suggestions<<SUGGESTIONS_EOF\n")
-              f.write(suggestions + "\n")
-              f.write("SUGGESTIONS_EOF\n")
+          # Save to file to avoid shell escaping issues
+          with open("/tmp/ai_suggestions.txt", "w") as f:
+              f.write(suggestions)
 
           print("AI Review complete!")
           print(suggestions[:500])
           PYEOF
 
       - name: Create GitHub Issue with AI feedback
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const suggestions = `${{ steps.ai_review.outputs.suggestions }}`;
-            const sha = context.sha.substring(0, 7);
-            const date = new Date().toISOString().split('T')[0];
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          python3 << 'PYEOF'
+          import os, json, urllib.request
 
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `🤖 AI Review [${sha}] - ${date}`,
-              body: `## 🤖 Vercel AI Gateway Review\n\nAutomatic review triggered by push \`${sha}\`.\n\n---\n\n${suggestions}\n\n---\n*Generated automatically via GitHub Models (gpt-4o-mini)*`,
-              labels: ['ai-review']
-            });
+          sha = os.environ['GH_SHA'][:7]
+          repo = os.environ['GITHUB_REPOSITORY']
+          token = os.environ['GITHUB_TOKEN']
+
+          try:
+              with open("/tmp/ai_suggestions.txt") as f:
+                  suggestions = f.read()
+          except:
+              suggestions = "Could not read AI suggestions."
+
+          from datetime import date
+          today = date.today().isoformat()
+
+          body = f"""## AI Game Review
+
+Automatic review triggered by push `{sha}`.
+
+---
+
+{suggestions}
+
+---
+*Generated automatically via GitHub Models (gpt-4o-mini)*"""
+
+          payload = json.dumps({
+              "title": f"AI Review [{sha}] - {today}",
+              "body": body,
+              "labels": ["ai-review"]
+          }).encode()
+
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{repo}/issues",
+              data=payload,
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Content-Type": "application/json",
+                  "Accept": "application/vnd.github+json"
+              }
+          )
+
+          with urllib.request.urlopen(req) as resp:
+              result = json.loads(resp.read())
+              print(f"Issue created: {result['html_url']}")
+          PYEOF
