@@ -4190,87 +4190,57 @@ var Starfield = function(speed,opacity,numStars,clear) {
 // ===================================================================
 var ShootingStarSystem = function() {
   this.stars = [];
-  // Continuous rain
-  this.rainTimer = 0;
-  // Occasional dramatic comet/red-giant shower
-  this.showerTimer = 15 + Math.random() * 20;
+  // First shower quickly, then periodic 30-150s gaps (max ~3-4 min total)
+  this.showerTimer  = 8 + Math.random() * 12;
   this.showerActive = false;
-  this.showerLeft = 0;
-  this.showerSpawn = 0;
-  this.showerVx = 0; this.showerVy = 0; this.showerDir = 0;
+  this.showerLeft   = 0;
+  this.showerSpawn  = 0;
+  this.showerVx = 0; this.showerVy = 0;
 };
 
 ShootingStarSystem.prototype._startShower = function() {
-  // Stars are small & far away — size ~0.8-1.8px, trail short
-  var ang = (20 + Math.random() * 50) * Math.PI / 180; // 20-70° from horizontal
+  // Diagonal angle: 45-70° from horizontal → noticeable slant, not vertical
+  var ang  = (45 + Math.random() * 25) * Math.PI / 180;
   var flip = Math.random() < 0.5 ? 1 : -1;
-  var spd = 380 + Math.random() * 280; // fixed, not screen-scaled (they're distant)
-  this.showerVx = flip * spd * Math.cos(ang);
-  this.showerVy = spd * Math.sin(ang);
-  this.showerDir = Math.floor(Math.random() * 5); // 0=top,1=left,2=right,3=top-left,4=top-right
-  this.showerLeft = 8 + Math.floor(Math.random() * 8); // 8-15 stars over ~3-4s
-  this.showerSpawn = 0;
+  var spd  = 320 + Math.random() * 260;
+  this.showerVx   = flip * spd * Math.cos(ang);
+  this.showerVy   = spd * Math.sin(ang);           // always downward
+  this.showerLeft = 20 + Math.floor(Math.random() * 20); // 20-39 meteors
+  this.showerSpawn  = 0;
   this.showerActive = true;
-  // Next shower: 60-120 seconds
-  this.showerTimer = 60 + Math.random() * 60;
+  // Next gap: 30-150s → max total cycle (shower ~8s + wait) ≈ 3-4 min
+  this.showerTimer = 30 + Math.random() * 120;
 };
 
 ShootingStarSystem.prototype.step = function(dt) {
-  // ── Continuous rain drops ──────────────────────────────────────────────
-  this.rainTimer -= dt;
-  if(this.rainTimer <= 0) {
-    this.rainTimer = 0.05 + Math.random() * 0.07; // 10-20 drops/sec
-    var rx = Math.random() * Game.width;
-    var spd = 320 + Math.random() * 220;  // 320-540 px/s
-    var drift = (Math.random() - 0.5) * 60; // slight horizontal drift
-    var sz = 0.5 + Math.random() * 0.9;
-    var trail = 20 + Math.random() * 30;
-    this.stars.push({ x:rx, y:-4, vx:drift, vy:spd,
-      trail:trail, size:sz, redGlow:false, life:3, isRain:true });
-  }
-
-  // ── Occasional dramatic shower (comets / red giants) ──────────────────
   this.showerTimer -= dt;
   if(this.showerTimer <= 0 && !this.showerActive) this._startShower();
 
   if(this.showerActive && this.showerLeft > 0) {
     this.showerSpawn -= dt;
     if(this.showerSpawn <= 0) {
-      // Spread spawns over ~3-4s total (8-15 stars → 0.2-0.5s apart)
-      this.showerSpawn = 0.20 + Math.random() * 0.30;
+      this.showerSpawn = 0.12 + Math.random() * 0.18; // spawn every 0.12-0.30s
       this.showerLeft--;
-      var d = this.showerDir;
-      var sx, sy;
-      if(d === 0)      { sx = Math.random() * Game.width; sy = -5; }
-      else if(d === 1) { sx = -5; sy = Math.random() * Game.height * 0.6; }
-      else if(d === 2) { sx = Game.width+5; sy = Math.random() * Game.height * 0.6; }
-      else if(d === 3) { sx = Math.random() * Game.width * 0.55; sy = -5; }
-      else             { sx = Game.width * 0.45 + Math.random() * Game.width * 0.55; sy = -5; }
-      var dv = (Math.random() - 0.5) * 0.20; // tiny angle variation within shower
+      // All start from top edge, spread across full width
+      var sx = Math.random() * Game.width;
+      var sy = -8;
+      var dv = (Math.random() - 0.5) * 0.15; // tiny angle variation within shower
       var cv = Math.cos(dv), sv = Math.sin(dv);
       var vx = this.showerVx*cv - this.showerVy*sv;
       var vy = this.showerVx*sv + this.showerVy*cv;
-      // Randomly assign star type: normal(60%), red giant(25%), comet(15%)
       var rnd = Math.random();
-      var starSize, starTrail, starRed, starLife;
-      if(rnd < 0.60) {        // normal — small, distant
-        starSize  = 0.7 + Math.random() * 0.9;
-        starTrail = 30 + Math.random() * 40;
-        starRed   = false;
-        starLife  = 4;
-      } else if(rnd < 0.85) { // red giant — slightly bigger + red glow
-        starSize  = 2.0 + Math.random() * 1.5;
-        starTrail = 50 + Math.random() * 40;
-        starRed   = true;
-        starLife  = 4.5;
-      } else {                // comet — long trail
-        starSize  = 0.8 + Math.random() * 0.7;
-        starTrail = 100 + Math.random() * 80;
-        starRed   = false;
-        starLife  = 5;
+      var sz, trail, isLarge;
+      if(rnd < 0.55) {       // small meteor
+        sz = 0.8 + Math.random() * 1.0; trail = 35 + Math.random() * 45; isLarge = false;
+      } else if(rnd < 0.82) {// medium
+        sz = 1.4 + Math.random() * 1.4; trail = 60 + Math.random() * 60; isLarge = false;
+      } else {               // large — fat cloud trail
+        sz = 2.2 + Math.random() * 2.0; trail = 90 + Math.random() * 100; isLarge = true;
       }
       this.stars.push({ x:sx, y:sy, vx:vx, vy:vy,
-        trail: starTrail, size: starSize, redGlow: starRed, life: starLife });
+        trail: trail, size: sz, isLarge: isLarge,
+        phase: Math.random() * Math.PI * 2, // stable jitter seed
+        life: 4 + Math.random() * 2 });
       if(this.showerLeft <= 0) this.showerActive = false;
     }
   }
@@ -4278,7 +4248,7 @@ ShootingStarSystem.prototype.step = function(dt) {
   for(var i = this.stars.length-1; i >= 0; i--) {
     var s = this.stars[i];
     s.x += s.vx*dt; s.y += s.vy*dt; s.life -= dt;
-    if(s.life <= 0 || s.x > Game.width+300 || s.y > Game.height+300 || s.x < -300 || s.y < -300)
+    if(s.life <= 0 || s.x > Game.width+400 || s.y > Game.height+400 || s.x < -400 || s.y < -400)
       this.stars.splice(i, 1);
   }
 };
@@ -4286,45 +4256,55 @@ ShootingStarSystem.prototype.step = function(dt) {
 ShootingStarSystem.prototype.draw = function(ctx) {
   if(!this.stars.length) return;
   ctx.save();
-  ctx.lineCap = 'round';
   for(var i = 0; i < this.stars.length; i++) {
-    var s = this.stars[i];
-    var sp = Math.sqrt(s.vx*s.vx + s.vy*s.vy);
-    var nx = s.vx/sp, ny = s.vy/sp;
-    var tx = s.x - nx*s.trail, ty = s.y - ny*s.trail;
-    var a = Math.min(1, s.life * 0.75); // fade gently
+    var s   = this.stars[i];
+    var sp  = Math.sqrt(s.vx*s.vx + s.vy*s.vy);
+    var nx  = s.vx/sp, ny = s.vy/sp;
+    var a   = Math.min(1, s.life * 0.65);
+    var nDots = s.isLarge ? 32 : 18;
 
-    // Soft outer glow (faint haze around trail)
-    var g1 = ctx.createLinearGradient(tx, ty, s.x, s.y);
-    g1.addColorStop(0,   'rgba(210,220,255,0)');
-    g1.addColorStop(0.6, 'rgba(225,232,255,' + (a*0.08) + ')');
-    g1.addColorStop(1,   'rgba(245,248,255,' + (a*0.25) + ')');
-    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(s.x,s.y);
-    ctx.strokeStyle = g1; ctx.lineWidth = s.size * 5; ctx.stroke();
+    // Cloud-dot trail: many tiny dots with stable jitter (no flicker)
+    for(var d = 0; d < nDots; d++) {
+      var t  = d / (nDots - 1); // 0 = head, 1 = tail
+      // Stable jitter using phase seed — sin/cos based so no per-frame randomness
+      var jw = s.size * (s.isLarge ? 4.5 : 2.2) * t;
+      var jx = Math.sin(d * 2.31 + s.phase) * jw;
+      var jy = Math.cos(d * 1.73 + s.phase * 0.9) * jw * 0.5;
+      var px = s.x - nx * s.trail * t + jx;
+      var py = s.y - ny * s.trail * t + jy;
 
-    // Bright core streak
-    var g3 = ctx.createLinearGradient(tx, ty, s.x, s.y);
-    g3.addColorStop(0, 'rgba(255,255,255,0)');
-    g3.addColorStop(1, 'rgba(255,255,255,' + (a*0.95) + ')');
-    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(s.x,s.y);
-    ctx.strokeStyle = g3; ctx.lineWidth = s.size; ctx.stroke();
+      // Color: head = warm yellow-white → orange → orange-red at tail
+      var cr, cg, cb;
+      if(t < 0.35) {
+        var tf = t / 0.35;
+        cr = 255; cg = Math.round(240 - tf * 80); cb = Math.round(160 - tf * 130);
+      } else {
+        var tf = (t - 0.35) / 0.65;
+        cr = Math.round(255 - tf * 60); cg = Math.round(160 - tf * 120); cb = Math.round(30 - tf * 28);
+      }
 
-    // Head: tiny soft halo
-    var hr = s.size * 3.5;
-    if(s.redGlow) {
-      // Outer red/orange ring first (behind white core)
-      var rr = hr * 4.5;
-      var rg = ctx.createRadialGradient(s.x, s.y, hr*0.8, s.x, s.y, rr);
-      rg.addColorStop(0,   'rgba(255,80,30,' + (a*0.35) + ')');
-      rg.addColorStop(0.4, 'rgba(255,50,10,' + (a*0.18) + ')');
-      rg.addColorStop(1,   'rgba(200,20,0,0)');
-      ctx.beginPath(); ctx.arc(s.x, s.y, rr, 0, Math.PI*2);
-      ctx.fillStyle = rg; ctx.fill();
+      var dotAlpha = (1 - t) * a * (s.isLarge ? 0.50 : 0.38);
+      var dotR     = s.size * (1 - t * 0.5) * (s.isLarge ? 1.4 : 1.0);
+
+      // Soft halo around each dot (cloud feel)
+      ctx.globalAlpha = dotAlpha * 0.28;
+      ctx.fillStyle = 'rgb(' + cr + ',' + cg + ',' + cb + ')';
+      ctx.beginPath();
+      ctx.arc(px, py, dotR * 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      // Dot core
+      ctx.globalAlpha = dotAlpha;
+      ctx.beginPath();
+      ctx.arc(px, py, dotR, 0, Math.PI * 2);
+      ctx.fill();
     }
+
+    // Bright head glow (warm white-yellow)
+    var hr = s.size * (s.isLarge ? 5 : 3);
     var hg = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, hr);
-    hg.addColorStop(0,   'rgba(255,255,255,' + (a*0.95) + ')');
-    hg.addColorStop(0.3, 'rgba(220,232,255,' + (a*0.40) + ')');
-    hg.addColorStop(1,   'rgba(180,210,255,0)');
+    hg.addColorStop(0,   'rgba(255,250,210,' + (a * 0.95) + ')');
+    hg.addColorStop(0.3, 'rgba(255,180, 60,' + (a * 0.45) + ')');
+    hg.addColorStop(1,   'rgba(220, 80, 10,0)');
     ctx.beginPath(); ctx.arc(s.x, s.y, hr, 0, Math.PI*2);
     ctx.fillStyle = hg; ctx.fill();
   }
