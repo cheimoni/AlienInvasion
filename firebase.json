@@ -1,0 +1,41 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      ".git/**",
+      ".vscode/**",
+      ".claude/**",
+      "*.sh",
+      "*.ps1",
+      "*.py",
+      "*.md",
+      "*.mp4",
+      "*.wav",
+      ".repo_metadata.json",
+      "nul",
+      "sfx_preview.html",
+      "images/Μην χρησιμοποιήσεις/**",
+      "images/Remove_background_completely_make_100_transparen-177177*.png",
+      "images/Remove_background_keep_*.png",
+      "music/**/WAV/**",
+      "music/**/__MACOSX/**"
+    ],
+    "releaseLimit": 5,
+    "headers": [
+      {
+        "source": "**/*.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "**/*.css",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      }
+    ]
+  }
+}
