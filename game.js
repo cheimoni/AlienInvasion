@@ -2783,7 +2783,7 @@ var _SELECTABLE_SHIPS = [
   'player_ship_11','player_ship_12','player_ship_13','player_ship_14','player_ship_15',
   'player_ship_16','player_ship_17','player_ship_18','player_ship_19'
 ];
-var _shipSelectThreshold = 30000; // next point milestone to open panel
+var _shipSelectThreshold = 50000; // next point milestone to open panel
 
 var ShipSelectScreen = function(callback) {
   Game.paused = true;
@@ -2977,9 +2977,9 @@ var earnPoints = function(board, cx, cy, base) {
   Game.points += earned;
   board.add(new ScorePopup(cx, cy, earned, comboMult));
 
-  // Ship select every 30000 pts
+  // Ship select every 50000 pts
   if(Game.points >= _shipSelectThreshold && !Game.paused && playerShip) {
-    _shipSelectThreshold += 30000;
+    _shipSelectThreshold += 50000;
     Game.setBoard(11, new ShipSelectScreen(function(key) {
       if(playerShip) playerShip.changeShip(key);
     }));
@@ -3060,7 +3060,7 @@ var playGame = function() {
     playerLives = PLAYER_LIVES;
     sessionKills = 0;
     nextLifeKills = 25;
-    _shipSelectThreshold = 30000;
+    _shipSelectThreshold = 50000;
     Game.points = 0;
     Game.godMode = false;
     Game._godComboHeld = false;
@@ -4585,7 +4585,7 @@ var BackgroundObjectsSystem = function() {
   // Era (scene) change system — new background scene every 6-7 levels
   this._eraLastLevel  = 1;
   this._eraLevelCount = 0;             // levels elapsed since last era change
-  this._eraInterval   = 6 + Math.floor(Math.random() * 2); // 6 or 7 levels per era
+  this._eraInterval   = 2; // background changes every 2 levels
 
   // Periodic background darkening effect
   this._darkAlpha  = 0;      // current overlay alpha (0=transparent, 1=full black)
@@ -4633,9 +4633,10 @@ var BackgroundObjectsSystem = function() {
       // Planet sizing: big/small tier, no isHuge multiplier
       var isPlanet = group.isPlanet || false;
       var isHuge, sizeBoost, targetScale;
+      var _isGuaranteedPlanet = (g === 0 && i === 0); // first planet is always large + on-screen
       if(isPlanet) {
-        var bigPlanet = Math.random() < 0.60; // 60% chance of large planet
-        targetScale = bigPlanet ? (_planetScale * (1.1 + Math.random() * 0.45))
+        var bigPlanet = _isGuaranteedPlanet ? true : Math.random() < 0.60;
+        targetScale = bigPlanet ? (_planetScale * (1.3 + Math.random() * 0.45))
                                 : (_planetScale * (0.60 + Math.random() * 0.22));
       } else {
         isHuge = !hugeObjectExists && Math.random() < 0.15;
@@ -4646,7 +4647,8 @@ var BackgroundObjectsSystem = function() {
 
       // ALL objects MUST start small and grow - NEVER start at full size
       var isZooming = true;
-      var startScale = 0.05 + Math.random() * 0.1; // Always start very small (0.05-0.15)
+      // Guaranteed planet starts a bit larger so it becomes visible faster
+      var startScale = _isGuaranteedPlanet ? (0.15 + Math.random() * 0.1) : (0.05 + Math.random() * 0.1);
 
       // Βάση ταχύτητας: πολύ αργά στο level 1, +1 ανά level
       var baseSpeed = 0.2 + Math.random() * 0.05; // 0.2-0.25 px/sec (tight range for uniform feel)
@@ -4655,7 +4657,8 @@ var BackgroundObjectsSystem = function() {
       var dir = Math.floor(Math.random() * 4); // 0=left->right, 1=right->left, 2=up->down, 3=down->up
 
       // 60% start from edges (off-screen), 40% start from center (but SMALL)
-      var fromEdge = Math.random() < 0.6;
+      // Guaranteed large planet always starts on-screen
+      var fromEdge = _isGuaranteedPlanet ? false : Math.random() < 0.6;
       var startX, startY;
 
       if(fromEdge) {
@@ -4760,7 +4763,7 @@ BackgroundObjectsSystem.prototype.step = function(dt) {
     this._eraLastLevel = currentLevel;
     if(this._eraLevelCount >= this._eraInterval) {
       this._eraLevelCount = 0;
-      this._eraInterval   = 6 + Math.floor(Math.random() * 2);
+      this._eraInterval   = 2; // every 2 levels
       // Stagger departure of every bg object over 0-18 seconds
       for(var _ei = 0; _ei < this.objects.length; _ei++) {
         var _eo = this.objects[_ei];
