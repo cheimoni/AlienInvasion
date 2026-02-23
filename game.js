@@ -4190,8 +4190,10 @@ var Starfield = function(speed,opacity,numStars,clear) {
 // ===================================================================
 var ShootingStarSystem = function() {
   this.stars = [];
-  // First shower after 12-25s so player sees one quickly; then ~3min intervals
-  this.showerTimer = 12 + Math.random() * 13;
+  // Continuous rain
+  this.rainTimer = 0;
+  // Occasional dramatic comet/red-giant shower
+  this.showerTimer = 15 + Math.random() * 20;
   this.showerActive = false;
   this.showerLeft = 0;
   this.showerSpawn = 0;
@@ -4214,6 +4216,20 @@ ShootingStarSystem.prototype._startShower = function() {
 };
 
 ShootingStarSystem.prototype.step = function(dt) {
+  // ── Continuous rain drops ──────────────────────────────────────────────
+  this.rainTimer -= dt;
+  if(this.rainTimer <= 0) {
+    this.rainTimer = 0.05 + Math.random() * 0.07; // 10-20 drops/sec
+    var rx = Math.random() * Game.width;
+    var spd = 320 + Math.random() * 220;  // 320-540 px/s
+    var drift = (Math.random() - 0.5) * 60; // slight horizontal drift
+    var sz = 0.5 + Math.random() * 0.9;
+    var trail = 20 + Math.random() * 30;
+    this.stars.push({ x:rx, y:-4, vx:drift, vy:spd,
+      trail:trail, size:sz, redGlow:false, life:3, isRain:true });
+  }
+
+  // ── Occasional dramatic shower (comets / red giants) ──────────────────
   this.showerTimer -= dt;
   if(this.showerTimer <= 0 && !this.showerActive) this._startShower();
 
