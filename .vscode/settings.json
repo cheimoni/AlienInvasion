@@ -1,0 +1,24 @@
+{
+  "zaiBridge.enabled": true,
+  "zaiBridge.autoAcknowledge": true,
+  "zaiBridge.autoRespond": true,
+  "zaiBridge.loopInterval": 5000,
+  "zaiBridge.maxIterations": 999999,
+  "zaiBridge.openRouterApiKey": "YOUR_OPENROUTER_API_KEY",
+  "zaiBridge.perplexityApiKey": "YOUR_PERPLEXITY_API_KEY",
+  "zaiBridge.geminiApiKey": "YOUR_GEMINI_API_KEY",
+  "zaiBridge.openaiApiKey": "YOUR_OPENAI_API_KEY",
+  "zaiBridge.defaultModel": "google/gemini-2.0-flash-exp:free",
+  "zaiBridge.fallbackModels": [
+    "meta-llama/llama-4-scout:free",
+    "deepseek/deepseek-v3-base:free",
+    "perplexity/llama-3.1-sonar-small-128k-online",
+    "perplexity/llama-3.1-sonar-large-128k-online",
+    "google/gemini-flash-1.5",
+    "openai/gpt-4o-mini",
+    "openai/gpt-4o"
+  ],
+  "zaiBridge.enableLogging": true,
+  "zaiBridge.verboseOutput": true,
+  "zaiBridge.licenseKey": "YOUR_ZAI_LICENSE_KEY"
+}

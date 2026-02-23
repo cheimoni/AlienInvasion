@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<title>SFX Preview — AlienInvasion</title>
+<style>
+  body { background:#060610; color:#a8b8c8; font-family:monospace; padding:24px; max-width:860px; }
+  h1 { color:#c04060; text-shadow:0 0 18px #c04060, 0 0 40px #800030; letter-spacing:3px; font-size:22px; }
+  h2 { color:#9050b0; margin-top:32px; border-bottom:1px solid #2a1a3a; padding-bottom:8px; font-size:15px; letter-spacing:2px; }
+  .row { display:flex; gap:9px; margin:7px 0; flex-wrap:wrap; align-items:center; }
+  button {
+    background:#100818; border:1px solid #502060; color:#c090d0; padding:10px 16px;
+    cursor:pointer; border-radius:4px; font-size:12px; transition:all .12s; letter-spacing:1px;
+    text-transform:uppercase;
+  }
+  button:hover { background:#220030; border-color:#c040a0; color:#fff; box-shadow:0 0 10px #80206080; }
+  button:active { background:#400050; transform:scale(0.97); }
+  .note { color:#504060; font-size:11px; margin-left:5px; font-style:italic; }
+  .label { color:#705080; min-width:80px; font-size:11px; text-transform:uppercase; letter-spacing:1px; }
+  .sub { color:#403050; font-size:10px; margin:2px 0 10px 4px; }
+  .warn { color:#604020; font-size:10px; margin-bottom:6px; }
+</style>
+</head>
+<body>
+<h1>☠ ALIEN INVASION — SFX FORGE</h1>
+<p style="color:#503050;font-size:11px">Dark/Mystical engine sounds — reverb + distortion + sub-bass on everything</p>
+
+<script>
+var ctx = new (window.AudioContext||window.webkitAudioContext)();
+
+// ─── Master chain: compressor + cave reverb ─────────────────
+var $C=null,$R=null;
+function $boot(){
+  if($C)return;
+  $C=ctx.createDynamicsCompressor();
+  $C.threshold.value=-16;$C.knee.value=8;$C.ratio.value=10;
+  $C.attack.value=0.001;$C.release.value=0.2;
+  $C.connect(ctx.destination);
+  // Cave reverb impulse (3s decay)
+  var len=Math.round(ctx.sampleRate*3);
+  var buf=ctx.createBuffer(2,len,ctx.sampleRate);
+  for(var c=0;c<2;c++){var d=buf.getChannelData(c);for(var i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,1.6);}
+  $R=ctx.createConvolver();$R.buffer=buf;
+  var rg=ctx.createGain();rg.gain.value=0.48;
+  $R.connect(rg);rg.connect($C);
+}
+// Connect node to dry out
+function $dry(node,vol){$boot();var g=ctx.createGain();g.gain.value=(vol!==undefined?vol:1);node.connect(g);g.connect($C);return g;}
+// Connect to reverb
+function $wet(node,vol){$boot();var g=ctx.createGain();g.gain.value=(vol!==undefined?vol:0.4);node.connect(g);g.connect($R);return g;}
+// Connect to both
+function $out(node,dv,wv){$dry(node,dv);if(wv!==undefined&&wv>0)$wet(node,wv);}
+
+// Distortion waveshaper
+function $D(amt){
+  var ws=ctx.createWaveShaper(),n=512,cv=new Float32Array(n);
+  for(var i=0;i<n;i++){var x=i*2/n-1;cv[i]=(Math.PI+amt)*x/(Math.PI+amt*Math.abs(x));}
+  ws.curve=cv;ws.oversample='4x';return ws;
+}
+// Filters
+function $LP(hz){var f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=hz;return f;}
+function $HP(hz){var f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=hz;return f;}
+
+// Oscillator with envelope — returns envelope gain node
+function $osc(type,f1,f2,vol,t,dur){
+  $boot();
+  var o=ctx.createOscillator();o.type=type;
+  t=t||ctx.currentTime;
+  o.frequency.setValueAtTime(f1,t);
+  if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+  var g=ctx.createGain();
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g);o.start(t);o.stop(t+dur+0.15);
+  return g;
+}
+// Noise burst — returns envelope gain
+function $N(vol,dur,t,lp,hp){
+  $boot();t=t||ctx.currentTime;
+  var len=Math.round(ctx.sampleRate*(dur+0.1));
+  var buf=ctx.createBuffer(1,len,ctx.sampleRate);
+  var d=buf.getChannelData(0);for(var i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  var src=ctx.createBufferSource();src.buffer=buf;
+  var g=ctx.createGain();
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur*0.88);
+  var chain=src;
+  if(lp){var fl=$LP(lp);src.connect(fl);chain=fl;}
+  if(hp){var fh=$HP(hp);chain.connect(fh);chain=fh;}
+  chain.connect(g);src.start(t);
+  return g;
+}
+// LFO-modulated oscillator — returns envelope gain
+function $LFO(type,freq,lfoRate,lfoDepth,f2,vol,t,dur){
+  $boot();t=t||ctx.currentTime;
+  var o=ctx.createOscillator();o.type=type;o.frequency.value=freq;
+  var lfo=ctx.createOscillator();lfo.type='sine';lfo.frequency.value=lfoRate;
+  var lg=ctx.createGain();lg.gain.value=lfoDepth;
+  lfo.connect(lg);lg.connect(o.frequency);
+  if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+  var g=ctx.createGain();
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g);lfo.start(t);o.start(t);lfo.stop(t+dur+0.1);o.stop(t+dur+0.15);
+  return g;
+}
+
+// ═════════════════════════════════════════════════════════════
+// SOUND FUNCTIONS
+// ═════════════════════════════════════════════════════════════
+
+// ── Explosions ───────────────────────────────────────────────
+function sndExpTiny(){
+  var t=ctx.currentTime;
+  var n1=$N(1.0,0.07,t,5000);$out(n1,1.0,0.2);
+  var g=$osc('sine',100,22,1.2,t,0.4);$out(g,1.0,0.35);
+  var n2=$N(0.6,0.25,t+0.03,500);$out(n2,0.7,0.5);
+}
+function sndExpMed(){
+  var t=ctx.currentTime;
+  $out($N(1.1,0.1,t,8000),1.0,0.15);
+  $out($N(0.9,0.6,t+0.03,400),0.9,0.65);
+  $out($osc('sine',110,18,1.3,t,0.75),1.0,0.45);
+  var g=$osc('sawtooth',55,16,0.8,t+0.05,1.0);var d=$D(140);g.connect(d);$out(d,0.7,0.55);
+}
+function sndExpHeavy(){
+  var t=ctx.currentTime;
+  $out($N(1.3,0.13,t,10000),1.1,0.1);
+  $out($osc('sine',80,14,1.6,t,1.3),1.1,0.45);
+  $out($osc('sine',40,10,1.1,t,1.6),0.9,0.5);
+  var n2=$N(1.0,0.8,t+0.04,600);var d=$D(200);n2.connect(d);$out(d,0.9,0.75);
+  $out($N(0.7,0.4,t,null,2500),0.7,0.3);
+  $out($osc('sawtooth',36,9,0.7,t+0.08,2.2),0.5,0.85);
+}
+function sndExpBoss(){
+  var t=ctx.currentTime;
+  $out($N(0.7,0.12,t,180),0.8,0.35);
+  $out($N(1.6,0.18,t+0.1,9000),1.3,0.1);
+  $out($osc('sine',60,9,2.2,t+0.1,2.8),1.3,0.55);
+  $out($osc('sine',30,7,1.6,t+0.1,3.2),1.1,0.65);
+  var n2=$N(1.3,1.2,t+0.12,700);var d=$D(260);n2.connect(d);$out(d,1.1,0.85);
+  $out($N(0.9,0.35,t+0.12,null,3500),0.8,0.3);
+  var g=$osc('sawtooth',45,7,1.1,t+0.14,3.8);var d2=$D(110);g.connect(d2);$out(d2,0.9,1.0);
+  for(var i=0;i<5;i++){$out($N(0.55,0.22,t+0.65+i*0.28,500),0.5-i*0.07,0.65);$out($osc('sine',50-i*4,14,0.65-i*0.1,t+0.65+i*0.28,0.38),0.55,0.45);}
+}
+function sndExpCascade(){
+  var t=ctx.currentTime;
+  for(var i=0;i<5;i++){
+    var d=i*0.2+Math.random()*0.06;
+    $out($N(0.8+i*0.1,0.3,t+d,600),0.8,0.65);
+    $out($osc('sine',80-i*7,18,1.0+i*0.1,t+d,0.5),0.8,0.45);
+  }
+  var nf=$N(1.1,0.55,t+1.1,380);var df=$D(170);nf.connect(df);$out(df,1.0,0.75);
+  $out($osc('sine',50,11,1.4,t+1.1,1.0),1.0,0.55);
+}
+function sndExpAlien(){
+  var t=ctx.currentTime;
+  $out($N(0.8,0.07,t,10000),0.9,0.1);
+  var g=$LFO('sawtooth',800,60,350,25,0.9,t,1.0);var d=$D(220);g.connect(d);$out(d,0.9,0.6);
+  $out($osc('sine',55,12,1.4,t+0.08,1.2),1.0,0.55);
+  for(var i=0;i<3;i++){$out($N(0.55,0.18,t+0.5+i*0.18,700),0.5,0.55);}
+}
+
+// ── Shooting ─────────────────────────────────────────────────
+function sndShootPlasma(){
+  var t=ctx.currentTime;
+  $out($N(0.5,0.04,t,3500),0.6,0.1);
+  var g=$osc('sawtooth',900,160,0.7,t+0.03,0.2);var d=$D(100);g.connect(d);$out(d,0.8,0.25);
+  $out($osc('sine',220,55,0.9,t+0.03,0.22),0.9,0.18);
+}
+function sndShootDark(){
+  var t=ctx.currentTime;
+  $out($N(0.9,0.07,t,400),1.0,0.15);
+  $out($osc('sine',320,50,1.0,t,0.14),1.0,0.12);
+  var g=$osc('sawtooth',160,30,0.7,t+0.02,0.16);var d=$D(120);g.connect(d);$out(d,0.8,0.12);
+}
+function sndShootBeam(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',700,90,320,75,0.8,t,0.24);var d=$D(140);g.connect(d);$out(d,0.9,0.3);
+  $out($osc('sine',200,50,0.9,t+0.01,0.25),0.9,0.2);
+}
+function sndShootHeavy(){
+  var t=ctx.currentTime;
+  $out($N(0.7,0.06,t,9000),0.9,0.1);
+  var g=$osc('sawtooth',1400,180,0.9,t,0.18);var d=$D(180);g.connect(d);$out(d,1.0,0.22);
+  $out($osc('sine',130,24,1.1,t+0.02,0.22),1.0,0.15);
+}
+function sndShootRocket(){
+  var t=ctx.currentTime;
+  var g=$osc('sawtooth',700,70,0.6,t,0.7);var d=$D(70);g.connect(d);$out(d,0.7,0.35);
+  $out($N(0.55,0.6,t,900),0.6,0.25);
+  $out($N(1.1,0.45,t+0.65,500),1.0,0.55);
+  $out($osc('sine',85,14,1.3,t+0.65,0.8),1.0,0.48);
+}
+function sndShootAlien(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',1100,120,400,90,0.85,t,0.2);var d=$D(160);g.connect(d);$out(d,0.9,0.35);
+  $out($osc('sine',60,18,0.8,t+0.04,0.2),0.7,0.1);
+}
+
+// ── Whirl & Fall ─────────────────────────────────────────────
+function sndDemonVortex(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',500,18,160,55,0.7,t,1.3);var d=$D(190);g.connect(d);$out(d,0.9,0.55);
+  var g2=$LFO('square',250,10,100,28,0.5,t,1.3);$out(g2,0.6,0.45);
+}
+function sndFallingBeast(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',1600,30,500,30,0.8,t,1.0);var d=$D(170);g.connect(d);$out(d,0.9,0.45);
+  $out($osc('sine',250,40,0.6,t,0.9),0.7,0.35);
+  $out($N(1.1,0.15,t+0.92,6000),1.1,0.15);
+  $out($N(1.0,0.7,t+0.94,420),0.9,0.7);
+  $out($osc('sine',85,14,1.4,t+0.94,0.65),1.0,0.5);
+}
+function sndSpiralDeath(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',1000,26,280,26,0.9,t,1.5);var d=$D(210);g.connect(d);$out(d,1.0,0.55);
+  var g2=$LFO('square',500,13,200,15,0.6,t,1.5);$out(g2,0.7,0.45);
+  $out($N(1.1,0.16,t+1.42,5000),1.0,0.15);
+  $out($N(0.9,0.65,t+1.44,400),0.9,0.7);
+  $out($osc('sine',80,13,1.3,t+1.44,0.7),1.0,0.5);
+}
+function sndMeteorCrash(){
+  var t=ctx.currentTime;
+  $out($N(0.45,0.15,t,5000),0.5,0.1);
+  $out($N(0.55,0.3,t+0.1,2500),0.55,0.15);
+  $out($N(0.65,0.45,t+0.3,1500),0.65,0.2);
+  var g=$osc('sawtooth',2200,280,0.6,t,0.85);var d=$D(220);g.connect(d);$out(d,0.65,0.35);
+  $out($N(1.4,0.18,t+0.9,9000),1.3,0.1);
+  var n4=$N(1.2,0.9,t+0.92,380);var di=$D(200);n4.connect(di);$out(di,1.1,0.85);
+  $out($osc('sine',70,11,1.7,t+0.92,1.4),1.3,0.65);
+  $out($osc('sine',35,7,1.3,t+0.95,1.7),1.0,0.75);
+}
+function sndCrumble(){
+  var t=ctx.currentTime;
+  for(var i=0;i<6;i++){
+    $out($N(0.6,0.12,t+i*0.12,600),0.6,0.5);
+    $out($osc('sawtooth',120-i*10,20-i*2,0.5,t+i*0.12,0.2),0.5,0.4);
+  }
+  $out($osc('sine',50,10,1.0,t+0.6,1.0),0.9,0.6);
+}
+function sndDimensionalFall(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',3000,40,800,20,0.7,t,1.8);var d=$D(240);g.connect(d);$out(d,0.85,0.65);
+  $out($osc('sine',80,12,1.0,t,1.8),0.8,0.5);
+  $out($N(0.8,1.5,t,null,100),0.5,0.4);
+  $out($N(1.0,0.2,t+1.75,500),1.0,0.55);
+  $out($osc('sine',60,10,1.5,t+1.75,0.8),1.0,0.6);
+}
+
+// ── Boss Entrance ─────────────────────────────────────────────
+function sndBossAwaken(){
+  var t=ctx.currentTime;
+  $out($N(0.9,0.6,t,180),0.9,0.45);
+  $out($osc('sine',50,14,1.1,t,0.9),1.0,0.55);
+  var g=$osc('sawtooth',80,220,0.8,t+0.5,0.9);var d=$D(200);g.connect(d);$out(d,0.9,0.7);
+  $out($N(1.3,0.18,t+1.3,9000),1.1,0.1);
+  var n2=$N(1.1,0.9,t+1.32,380);var d2=$D(210);n2.connect(d2);$out(d2,1.1,0.9);
+  $out($osc('sine',55,11,1.5,t+1.32,1.3),1.2,0.65);
+  $out($osc('sine',28,7,1.1,t+1.34,1.6),1.0,0.75);
+}
+function sndBossRoar(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',55,5,35,900,1.2,t,1.6);var d=$D(240);g.connect(d);$out(d,1.0,0.65);
+  var og=ctx.createGain();og.gain.setValueAtTime(0.001,t);og.gain.linearRampToValueAtTime(1.0,t+0.25);og.gain.setValueAtTime(1.0,t+0.9);og.gain.exponentialRampToValueAtTime(0.001,t+1.7);
+  d.connect(og);og.connect($C);
+  $out($osc('sine',40,9,1.2,t,1.8),0.9,0.55);
+  $out($N(0.9,1.4,t+0.1,550),0.8,0.75);
+}
+function sndBossRift(){
+  var t=ctx.currentTime;
+  var g=$osc('sine',30,2200,0.9,t,0.55);var d=$D(320);g.connect(d);$out(d,1.0,0.75);
+  var g2=$osc('sawtooth',3200,180,0.7,t+0.35,0.9);var d2=$D(280);g2.connect(d2);$out(d2,0.85,0.55);
+  for(var i=0;i<4;i++){
+    $out($N(0.8,0.12,t+0.48+i*0.13,380),0.7,0.4);
+    $out($osc('sine',62+i*22,13+i*3,1.1-i*0.2,t+0.48+i*0.13,0.45),0.9,0.55);
+  }
+  $out($N(1.4,0.18,t+1.1,9000),1.1,0.1);
+  var nf=$N(1.1,0.8,t+1.12,340);var df=$D(220);nf.connect(df);$out(df,1.1,0.9);
+  $out($osc('sine',50,9,1.6,t+1.12,1.1),1.2,0.65);
+}
+function sndBossThunder(){
+  var t=ctx.currentTime;
+  for(var i=0;i<3;i++){
+    $out($N(0.7+i*0.15,0.15,t+i*0.32,250),0.7,0.45);
+    $out($osc('sine',55+i*12,14,0.9,t+i*0.32,0.6),0.8,0.5);
+  }
+  var g=$osc('sawtooth',60,800,0.9,t+0.8,0.55);var d=$D(180);g.connect(d);$out(d,1.0,0.7);
+  $out($N(1.2,0.18,t+1.4,8000),1.1,0.1);
+  $out($N(1.0,0.7,t+1.42,360),1.0,0.8);
+  $out($osc('sine',50,10,1.5,t+1.42,1.0),1.2,0.6);
+}
+function sndBossCosmicHorror(){
+  var t=ctx.currentTime;
+  $out($N(0.7,2.0,t,150),0.6,0.7);
+  var g=$LFO('sawtooth',22,2.5,18,80,0.9,t,2.0);var d=$D(280);g.connect(d);$out(d,0.8,0.8);
+  $out($osc('sine',35,8,1.0,t,2.5),0.9,0.7);
+  for(var i=0;i<8;i++)$out($osc('sine',55+i*33,0,0.18-i*0.01,t+i*0.22,0.3),0.3,0.8);
+  $out($N(1.2,0.2,t+1.85,9000),1.0,0.1);
+  var nf=$N(1.0,0.7,t+1.87,330);var df=$D(200);nf.connect(df);$out(df,1.0,0.9);
+}
+
+// ── Enemy Death ───────────────────────────────────────────────
+function sndDeathSmall(){
+  var t=ctx.currentTime;
+  $out($N(0.9,0.1,t,3000),1.0,0.25);
+  var g=$osc('sawtooth',700,28,0.9,t,0.4);var d=$D(200);g.connect(d);$out(d,1.0,0.45);
+  $out($osc('sine',85,18,0.8,t+0.1,0.45),0.8,0.35);
+}
+function sndDeathScreech(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',1400,40,460,22,0.9,t,0.7);var d=$D(220);g.connect(d);$out(d,1.0,0.55);
+  $out($N(0.7,0.18,t,900),0.8,0.3);
+  $out($osc('sine',80,17,0.8,t+0.55,0.4),0.7,0.4);
+}
+function sndDeathExplode(){
+  var t=ctx.currentTime;
+  $out($N(1.1,0.1,t,8000),1.0,0.15);
+  $out($N(0.9,0.6,t+0.03,450),0.9,0.65);
+  $out($osc('sine',90,16,1.2,t,0.7),1.0,0.45);
+  var g=$osc('sawtooth',50,14,0.7,t+0.04,1.0);var d=$D(130);g.connect(d);$out(d,0.7,0.55);
+}
+function sndDeathBoss(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',500,32,290,18,1.0,t,1.5);var d=$D(260);g.connect(d);$out(d,1.0,0.65);
+  $out($N(1.0,1.3,t,480),0.9,0.75);
+  $out($osc('sine',50,13,1.3,t,1.6),1.0,0.55);
+  for(var i=0;i<5;i++){$out($N(0.6,0.18,t+0.6+i*0.2,550),0.5,0.55);$out($osc('sine',58-i*7,16,0.7-i*0.1,t+0.6+i*0.2,0.3),0.5,0.45);}
+}
+function sndDeathGlitch(){
+  var t=ctx.currentTime;
+  for(var i=0;i<6;i++){
+    $out($N(0.7+Math.random()*0.4,0.07,t+i*0.06,null,200+Math.random()*3000),0.7,0.3);
+  }
+  $out($osc('sawtooth',400,20,0.8,t,0.4),0.7,0.3);
+}
+
+// ── Player Hit ────────────────────────────────────────────────
+function sndHitLight(){
+  var t=ctx.currentTime;
+  $out($N(1.0,0.09,t,4000),1.0,0.18);
+  var g=$osc('sawtooth',500,70,0.9,t,0.22);var d=$D(140);g.connect(d);$out(d,1.0,0.22);
+}
+function sndHitHeavy(){
+  var t=ctx.currentTime;
+  $out($N(1.0,0.11,t,6000),1.1,0.12);
+  var g=$osc('sawtooth',900,60,1.0,t,0.32);var d=$D(200);g.connect(d);$out(d,1.1,0.22);
+  $out($osc('sine',110,20,1.1,t+0.06,0.5),1.0,0.35);
+  $out($N(0.8,0.35,t+0.06,420),0.9,0.45);
+}
+function sndHitElectric(){
+  var t=ctx.currentTime;
+  $out($N(1.1,0.06,t,9000),1.1,0.12);
+  $out($N(0.9,0.18,t+0.02,null,600),1.0,0.22);
+  var g=$osc('sawtooth',1800,90,0.8,t,0.22);var d=$D(240);g.connect(d);$out(d,0.9,0.18);
+  $out($osc('sine',80,17,0.9,t+0.09,0.4),0.9,0.35);
+}
+function sndHitDevastating(){
+  var t=ctx.currentTime;
+  $out($N(1.2,0.14,t,7000),1.1,0.1);
+  var g=$osc('sawtooth',1200,65,1.1,t,0.35);var d=$D(220);g.connect(d);$out(d,1.1,0.22);
+  $out($N(1.0,0.7,t+0.04,430),1.0,0.65);
+  $out($osc('sine',100,18,1.3,t+0.08,0.6),1.1,0.4);
+  $out($osc('sine',50,10,1.0,t+0.1,0.8),0.9,0.45);
+}
+
+// ── Rotation ──────────────────────────────────────────────────
+function sndRotateLow(){
+  var g=$LFO('sawtooth',180,9,70,0,0.45,ctx.currentTime,0.8);var d=$D(90);g.connect(d);$out(d,0.7,0.45);
+}
+function sndRotateMech(){
+  var t=ctx.currentTime;
+  for(var i=0;i<7;i++)$out($osc('sawtooth',180+i*50,0,0.15,t+i*0.06,0.09),0.7,0.3);
+}
+function sndRotateBlade(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',280,14,110,0,0.5,t,0.65);var d=$D(120);g.connect(d);$out(d,0.8,0.4);
+  $out($N(0.35,0.5,t,1500),0.4,0.25);
+}
+function sndRotateElectric(){
+  var g=$LFO('sawtooth',220,22,130,0,0.55,ctx.currentTime,0.7);var d=$D(160);g.connect(d);$out(d,0.8,0.5);
+}
+
+// ── Dive Attack ───────────────────────────────────────────────
+function sndDiveScreech(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',900,50,250,65,0.8,t,0.8);var d=$D(180);g.connect(d);$out(d,0.95,0.45);
+  $out($N(0.55,0.65,t,1100),0.65,0.3);
+}
+function sndDiveRoar(){
+  var t=ctx.currentTime;
+  var g=$LFO('sawtooth',400,35,160,55,0.9,t,0.9);var d=$D(200);g.connect(d);$out(d,1.0,0.5);
+  $out($osc('sine',80,16,0.7,t+0.2,0.9),0.7,0.35);
+}
+function sndDiveHeavy(){
+  var t=ctx.currentTime;
+  var g=$LFO('square',600,40,200,50,0.8,t,1.0);var d=$D(220);g.connect(d);$out(d,0.9,0.5);
+  $out($osc('sine',55,12,1.0,t,1.0),0.8,0.4);
+  $out($N(0.6,0.8,t,1200),0.6,0.35);
+}
+
+// ── Warp / Teleport ───────────────────────────────────────────
+function sndWarpIn(){
+  var t=ctx.currentTime;
+  var g=$osc('sawtooth',40,1800,0.7,t,0.5);var d=$D(200);g.connect(d);$out(d,0.8,0.7);
+  $out($N(0.8,0.35,t,1200),0.7,0.45);
+  $out($osc('sine',900,2000,0.5,t+0.32,0.22),0.6,0.55);
+}
+function sndWarpOut(){
+  var t=ctx.currentTime;
+  var g=$osc('sawtooth',1800,35,0.7,t,0.45);var d=$D(180);g.connect(d);$out(d,0.8,0.6);
+  $out($N(0.7,0.18,t,null,500),0.6,0.35);
+}
+function sndWarpAlien(){
+  var t=ctx.currentTime;
+  var g=$LFO('sine',900,30,350,1800,0.6,t,0.25);$out(g,0.7,0.65);
+  var g2=$LFO('sine',900,30,350,180,0.6,t+0.28,0.3);$out(g2,0.6,0.55);
+  $out($N(0.5,0.12,t+0.22,1000),0.5,0.3);
+}
+function sndLaserCharge(){
+  var t=ctx.currentTime;
+  $out($osc('sine',200,2200,0.3,t,0.7),0.5,0.3);
+  var g=$LFO('sawtooth',1800,35,280,400,0.6,t+0.55,0.3);var d=$D(180);g.connect(d);$out(d,0.8,0.25);
+  $out($N(0.9,0.18,t+0.65,1200),0.9,0.15);
+  var g2=$osc('sawtooth',2200,300,0.9,t+0.68,0.25);var d2=$D(220);g2.connect(d2);$out(d2,1.0,0.2);
+  $out($osc('sine',200,50,1.0,t+0.7,0.3),0.9,0.15);
+}
+
+// ── Power-Up ──────────────────────────────────────────────────
+function sndCollect(){
+  var t=ctx.currentTime;
+  for(var i=0;i<7;i++)$out($osc('sine',440+i*140,0,0.28-i*0.02,t+i*0.06,0.12),0.7,0.5);
+}
+function sndPowerUp(){
+  var t=ctx.currentTime;
+  $out($osc('sine',300,1400,0.4,t,0.5),0.7,0.55);
+  $out($osc('sine',320,1500,0.25,t+0.02,0.5),0.5,0.45);
+  $out($osc('sine',1600,0,0.3,t+0.48,0.25),0.6,0.5);
+}
+function sndShieldUp(){
+  var t=ctx.currentTime;
+  $out($osc('sine',200,900,0.35,t,0.35),0.7,0.6);
+  var g=$LFO('sine',700,9,45,0,0.22,t+0.32,0.7);$out(g,0.5,0.65);
+  $out($osc('sine',1300,0,0.2,t+0.35,0.3),0.5,0.55);
+}
+</script>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>💥 ΕΚΡΗΞΕΙΣ</h2>
+<p class="sub">Layered sub-bass + distortion + cave reverb</p>
+<div class="row">
+  <span class="label">Μικρή</span>
+  <button onclick="sndExpTiny()">A — Ground Burst</button>
+  <button onclick="sndExpMed()">B — Combat Blast</button>
+  <button onclick="sndExpHeavy()">C — Heavy Destruction</button>
+  <span class="note">A=μικρός εχθρός, B=μεσαίος, C=μεγάλος</span>
+</div>
+<div class="row">
+  <span class="label">Boss / Μαζική</span>
+  <button onclick="sndExpBoss()">D — Nuclear Annihilation</button>
+  <button onclick="sndExpCascade()">E — Chain Reaction</button>
+  <button onclick="sndExpAlien()">F — Alien Core Meltdown</button>
+  <span class="note">D=boss death, E=αλυσιδωτή, F=alien tech</span>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>🔫 ΠΥΡΟΒΟΛΙΣΜΟΣ</h2>
+<div class="row">
+  <span class="label">Laser/Plasma</span>
+  <button onclick="sndShootPlasma()">A — Plasma Cannon</button>
+  <button onclick="sndShootBeam()">B — Modulated Beam</button>
+  <button onclick="sndShootAlien()">C — Alien Pulse</button>
+</div>
+<div class="row">
+  <span class="label">Βαρύ/Rocket</span>
+  <button onclick="sndShootDark()">D — Dark Matter Shot</button>
+  <button onclick="sndShootHeavy()">E — Rail Cannon</button>
+  <button onclick="sndShootRocket()">F — Rocket Launch</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>🌀 ΣΤΡΩΒΙΛΙΣΜΟΣ + ΠΤΩΣΗ</h2>
+<div class="row">
+  <span class="label">Στρόβιλος</span>
+  <button onclick="sndDemonVortex()">A — Demon Vortex</button>
+  <button onclick="sndRotateBlade()">B — Blade Spin</button>
+  <button onclick="sndRotateElectric()">C — Electric Rotor</button>
+  <button onclick="sndRotateMech()">D — Mechanical Grind</button>
+</div>
+<div class="row">
+  <span class="label">Πτώση</span>
+  <button onclick="sndFallingBeast()">E — Falling Beast</button>
+  <button onclick="sndSpiralDeath()">F — Spiral of Doom</button>
+  <button onclick="sndMeteorCrash()">G — Meteor Impact</button>
+  <button onclick="sndDimensionalFall()">H — Void Collapse</button>
+</div>
+<div class="row">
+  <span class="label">Κατάρρευση</span>
+  <button onclick="sndCrumble()">I — Stone Crumble</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>👾 BOSS ΕΜΦΑΝΙΣΗ</h2>
+<div class="row">
+  <span class="label"></span>
+  <button onclick="sndBossAwaken()">A — Ancient Evil Awakens</button>
+  <button onclick="sndBossRoar()">B — Demonic Roar</button>
+  <button onclick="sndBossRift()">C — Dimensional Rift</button>
+  <button onclick="sndBossThunder()">D — Dark Thunder</button>
+  <button onclick="sndBossCosmicHorror()">E — Cosmic Horror</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>⬇️ ΚΑΘΕΤΗ ΕΠΙΘΕΣΗ (Dive)</h2>
+<div class="row">
+  <span class="label"></span>
+  <button onclick="sndDiveScreech()">A — Death Screech Dive</button>
+  <button onclick="sndDiveRoar()">B — Roaring Dive</button>
+  <button onclick="sndDiveHeavy()">C — Heavy Descent</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>💀 ΣΚΟΤΩΜΑ ΕΧΘΡΟΥ</h2>
+<div class="row">
+  <span class="label"></span>
+  <button onclick="sndDeathSmall()">A — Creature Grunt</button>
+  <button onclick="sndDeathScreech()">B — Death Screech</button>
+  <button onclick="sndDeathExplode()">C — Body Burst</button>
+  <button onclick="sndDeathGlitch()">D — Glitch Death</button>
+  <button onclick="sndDeathBoss()">E — Boss Death</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>😖 ΧΤΥΠΗΜΑ ΠΑΙΚΤΗ</h2>
+<div class="row">
+  <span class="label"></span>
+  <button onclick="sndHitLight()">A — Light Hit</button>
+  <button onclick="sndHitHeavy()">B — Heavy Impact</button>
+  <button onclick="sndHitElectric()">C — Electric Shock</button>
+  <button onclick="sndHitDevastating()">D — Devastating Blow</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>🌌 WARP / ΤΗΛΕΜΕΤΑΦΟΡΑ</h2>
+<div class="row">
+  <span class="label"></span>
+  <button onclick="sndWarpIn()">A — Portal Open</button>
+  <button onclick="sndWarpOut()">B — Portal Close</button>
+  <button onclick="sndWarpAlien()">C — Alien Phase</button>
+  <button onclick="sndLaserCharge()">D — Laser Charge+Fire</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>✨ POWER-UP / BONUS</h2>
+<div class="row">
+  <span class="label"></span>
+  <button onclick="sndCollect()">A — Collect</button>
+  <button onclick="sndPowerUp()">B — Power Surge</button>
+  <button onclick="sndShieldUp()">C — Shield Activate</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<h2>🔄 ΠΕΡΙΣΤΡΟΦΗ</h2>
+<div class="row">
+  <span class="label"></span>
+  <button onclick="sndRotateLow()">A — Low Rotor</button>
+  <button onclick="sndRotateMech()">B — Mechanical</button>
+  <button onclick="sndRotateBlade()">C — Blade</button>
+  <button onclick="sndRotateElectric()">D — Electric</button>
+</div>
+
+<br><br>
+<p style="color:#352535;font-size:11px">
+  💬 Πες μου ποιο γράμμα σου αρέσει ανά κατηγορία και το βάζω στο παιχνίδι.
+</p>
+</body>
+</html>

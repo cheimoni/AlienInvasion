@@ -1,0 +1,93 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ZAI: Auto-Start AI Loop",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "${workspaceFolder}/.vscode/zai-autostart.sh"
+      ],
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "showReuseMessage": false,
+        "close": true
+      },
+      "group": "none"
+    },
+    {
+      "label": "ZAI: Stop AI Loop",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "curl -s -X POST http://localhost:8080/mcp -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"activate_infinite_loop\",\"arguments\":{\"message\":\"stploop\"}}}' && echo 'ZAI loop stopped.'"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Git: Checkpoint + One-Click Push",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cd \"${workspaceFolder}\" && git add -A && git commit -m \"checkpoint $(date '+%Y-%m-%d %H:%M')\" && git push"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Git: One-Click Push",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cd \"${workspaceFolder}\" && git push"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Git: Restore latest checkpoint (HARD)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cd \"${workspaceFolder}\" && git fetch && git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "group": "none"
+    },
+    {
+      "label": "Git: Revert last commit (safe)",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "cd \"${workspaceFolder}\" && git revert HEAD --no-edit && git push"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "group": "none"
+    }
+  ]
+}
