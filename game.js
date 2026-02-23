@@ -4231,12 +4231,14 @@ ShootingStarSystem.prototype.step = function(dt) {
       var vy = this.showerVx*sv + this.showerVy*cv;
       var rnd = Math.random();
       var sz, trail, isLarge;
-      if(rnd < 0.55) {       // small meteor
-        sz = 0.8 + Math.random() * 1.0; trail = 35 + Math.random() * 45; isLarge = false;
-      } else if(rnd < 0.82) {// medium
-        sz = 1.4 + Math.random() * 1.4; trail = 60 + Math.random() * 60; isLarge = false;
-      } else {               // large — fat cloud trail
-        sz = 2.2 + Math.random() * 2.0; trail = 90 + Math.random() * 100; isLarge = true;
+      if(rnd < 0.50) {       // small meteor (50%)
+        sz = 0.8 + Math.random() * 1.0; trail = 35 + Math.random() * 45;   isLarge = false;
+      } else if(rnd < 0.78) {// medium (28%)
+        sz = 1.4 + Math.random() * 1.4; trail = 65 + Math.random() * 75;   isLarge = false;
+      } else if(rnd < 0.93) {// large — fat cloud trail (15%)
+        sz = 2.2 + Math.random() * 2.2; trail = 130 + Math.random() * 140; isLarge = true;
+      } else {               // comet — very long cloud trail (7%)
+        sz = 2.8 + Math.random() * 2.8; trail = 260 + Math.random() * 220; isLarge = true;
       }
       this.stars.push({ x:sx, y:sy, vx:vx, vy:vy,
         trail: trail, size: sz, isLarge: isLarge,
