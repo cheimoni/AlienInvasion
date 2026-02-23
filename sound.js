@@ -427,6 +427,7 @@ var SoundManager = new function() {
     this.startMusic = function() {
         if(muted || musicMuted) return;
         this.stopMusic();
+        this.resume(); // Ensure AudioContext is running — required because createMediaElementSource routes audio through Web Audio API
 
         // Build a fresh shuffle at startup
         _shuffledList = _shuffle(musicPlaylist.slice());
@@ -462,10 +463,19 @@ var SoundManager = new function() {
             musicAudio.src = src;
             musicAudio.volume = 0;
             musicAudio.load();
-            musicAudio.play().catch(function() {
-                musicNode = setTimeout(playNext, 3000);
-            });
-            self.fadeIn(2.0);
+            var doPlay = function() {
+                if(!musicAudio) return;
+                musicAudio.play().catch(function() {
+                    musicNode = setTimeout(playNext, 3000);
+                });
+                self.fadeIn(2.0);
+            };
+            // Wait for AudioContext to actually resume before playing
+            if(audioContext && audioContext.state !== 'running') {
+                audioContext.resume().then(doPlay).catch(doPlay);
+            } else {
+                doPlay();
+            }
         }
 
         musicAudio.addEventListener('ended', playNext);
