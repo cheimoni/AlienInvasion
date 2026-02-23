@@ -4,14 +4,44 @@
   <meta charset="UTF-8"/>
   <title>Alien Invasion</title>
   <link rel="stylesheet" href="base.css" type="text/css" />
-  <link href='http://fonts.googleapis.com/css?family=Bangers' rel='stylesheet' type='text/css'>
-  <meta name="viewport" content="width=device-width, user-scalable=0, minimum-scale=1.0, maximum-scale=1.0"/>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link href='https://fonts.googleapis.com/css2?family=Uncial+Antiqua&display=swap' rel='stylesheet' type='text/css'>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#000000">
 </head>
 <body>
+  <!-- Rotate overlay: shown when phone is in landscape -->
+  <div id="rotate-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000014; z-index:9999; align-items:center; justify-content:center; flex-direction:column; color:#00CCFF; font-family:Arial,sans-serif; text-align:center;">
+    <div style="font-size:56px; margin-bottom:16px; animation: spin 2s linear infinite;">&#8635;</div>
+    <div style="font-size:22px; font-weight:bold;">Rotate your device</div>
+    <div style="font-size:14px; margin-top:10px; color:#5599BB;">Portrait mode required</div>
+  </div>
+  <style>
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    #audio-controls {
+      position: fixed; top: 4px; right: 4px; z-index: 9998;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    #audio-controls button {
+      background: rgba(0,8,28,0.82);
+      color: #00AAFF;
+      border: 1px solid rgba(0,150,255,0.40);
+      font-size: 9px; font-family: Arial, sans-serif;
+      padding: 2px 5px; border-radius: 3px; cursor: pointer;
+      touch-action: auto; -webkit-tap-highlight-color: transparent;
+      min-width: 36px; line-height: 1.4; text-align: center;
+      user-select: none; -webkit-user-select: none;
+    }
+    #audio-controls button.off { color: rgba(80,110,140,0.65); border-color: rgba(50,80,110,0.35); }
+  </style>
   <div id='container'>
     <canvas id='game' width='320' height='480'></canvas>
+  </div>
+  <div id="audio-controls">
+    <button id="btn-music" onclick="(function(b){var m=SoundManager.toggleMusicMute();b.textContent=m?'\u266a OFF':'\u266a ON';b.className=m?'off':'';})(this)">&#9834; ON</button>
+    <button id="btn-sfx"   onclick="(function(b){var m=SoundManager.toggleSfxMute();b.textContent=m?'FX OFF':'FX ON';b.className=m?'off':'';})(this)">FX ON</button>
   </div>
   <script src='engine.js'></script>
   <script src='sound.js'></script>

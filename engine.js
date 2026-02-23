@@ -44,16 +44,13 @@ var Game = new function() {
   this.initialize = function(canvasElementId,sprite_data,callback) {
     this.canvas = document.getElementById(canvasElementId);
 
-    this.playerOffset = 10;
+    this.playerOffset = 0;
     this.canvasMultiplier= 1;
     this.scale = 1; // Default scale
     this.setupMobile();
 
     // Make canvas fullscreen on desktop
     this.makeFullscreen();
-
-    // Show canvas with fade-in effect (prevents black flash)
-    this.canvas.classList.add('game-ready');
 
     // Only set width/height if makeFullscreen didn't set them
     if(!this.fullscreenMode) {
@@ -69,10 +66,23 @@ var Game = new function() {
     this.loop();
 
     if(this.mobile) {
-      this.setBoard(4,new TouchControls());
+      this.setBoard(10,new TouchControls());
     }
 
-    SpriteSheet.load(sprite_data,callback);
+    // Show loading screen while sprites load
+    var _ls = new LoadingScreen();
+    this.setBoard(9, _ls);
+
+    SpriteSheet.load(sprite_data, function() {
+      _ls.setProgress(1.0);
+      // Hold 100% briefly so the player sees it, then launch game
+      setTimeout(function() {
+        Game.setBoard(9, null);
+        callback();
+      }, 350);
+    }, function(ratio) {
+      _ls.setProgress(ratio);
+    });
   };
 
   // Fullscreen functionality
@@ -88,8 +98,8 @@ var Game = new function() {
     this.canvas.style.position = 'fixed';
     this.canvas.style.left = '0';
     this.canvas.style.top = '0';
-    this.canvas.style.width = '100%';
-    this.canvas.style.height = '100%';
+    this.canvas.style.width = '100vw';
+    this.canvas.style.height = '100vh';
 
     // Hide body overflow
     document.body.style.margin = '0';
@@ -99,6 +109,10 @@ var Game = new function() {
     this.width = this.canvas.width;
     this.height = this.canvas.height;
 
+    // Sprite scale: bigger enemies on bigger monitors
+    // 750px → 1.0×,  1366px → 1.82×,  1920px → 2.5× (capped)
+    Game.spriteScale = Math.min(2.0, Math.max(1.0, this.width / 750));
+
     // Handle resize
     var self = this;
     window.addEventListener('resize', function() {
@@ -106,15 +120,21 @@ var Game = new function() {
       self.canvas.height = window.innerHeight;
       self.width = self.canvas.width;
       self.height = self.canvas.height;
+      Game.spriteScale = Math.min(2.0, Math.max(1.0, self.width / 750));
     });
   };
   
 
   // Handle Input
-  var KEY_CODES = { 37:'left', 39:'right', 32 :'fire', 77:'mute' };
+  var KEY_CODES = { 37:'left', 39:'right', 88:'rocket', 77:'mute' }; // 32 (space) handled separately
   this.keys = {};
+  this.paused = false;
+  this.playing = false;
 
   this.setupInput = function() {
+    // Hide cursor on canvas
+    Game.canvas.style.cursor = 'none';
+
     window.addEventListener('keydown',function(e) {
       if(KEY_CODES[e.keyCode]) {
        Game.keys[KEY_CODES[e.keyCode]] = true;
@@ -124,6 +144,37 @@ var Game = new function() {
       if(e.keyCode === 77) {
         SoundManager.toggleMute();
       }
+      // Cheat code digit tracking (1=49, 2=50, 3=51, 4=52)
+      if(e.keyCode >= 49 && e.keyCode <= 52) Game.keys['num' + (e.keyCode - 48)] = true;
+
+      // ESC: pause + release pointer lock
+      if(e.keyCode === 27) {
+        e.preventDefault();
+        if(Game.playing) {
+          Game.paused = true;
+          var _epl = document.exitPointerLock || document.mozExitPointerLock || document.webkitExitPointerLock;
+          if(_epl) _epl.call(document);
+        }
+      }
+
+      // Spacebar: start game on title screen / toggle pause during gameplay
+      if(e.keyCode === 32) {
+        e.preventDefault();
+        if(!Game.playing) {
+          Game.keys['fire'] = true;  // title screen: start
+        } else if(Game.paused && !Game.shipSelectOpen) {
+          Game.paused = false;
+          Game.keys['fire'] = false;  // don't fire on resume
+          if(!Game.mobile) {
+            var _rpl = Game.canvas.requestPointerLock || Game.canvas.mozRequestPointerLock || Game.canvas.webkitRequestPointerLock;
+            if(_rpl) _rpl.call(Game.canvas);
+          }
+        } else if(!Game.shipSelectOpen) {
+          Game.paused = true;
+          var _epl2 = document.exitPointerLock || document.mozExitPointerLock || document.webkitExitPointerLock;
+          if(_epl2) _epl2.call(document);
+        }
+      }
     },false);
 
     window.addEventListener('keyup',function(e) {
@@ -131,14 +182,48 @@ var Game = new function() {
        Game.keys[KEY_CODES[e.keyCode]] = false;
        e.preventDefault();
       }
+      if(e.keyCode >= 49 && e.keyCode <= 52) Game.keys['num' + (e.keyCode - 48)] = false;
+      if(e.keyCode === 32) Game.keys['fire'] = false;  // clear title screen fire
     },false);
 
-    // Mouse position tracking for ship movement
+    // Mouse position tracking: only update when pointer lock is active (prevents jump on lock transitions)
     this.mouseX = Game.width / 2;
     this.canvas.addEventListener('mousemove',function(e) {
-      var rect = Game.canvas.getBoundingClientRect();
-      Game.mouseX = (e.clientX - rect.left) * (Game.width / rect.width);
+      var _locked = document.pointerLockElement === Game.canvas ||
+                    document.mozPointerLockElement === Game.canvas ||
+                    document.webkitPointerLockElement === Game.canvas;
+      if(_locked) {
+        var rect = Game.canvas.getBoundingClientRect();
+        var _scale = rect.width > 0 ? Game.width / rect.width : 1;
+        Game.mouseX = Math.max(0, Math.min(Game.width, Game.mouseX + e.movementX * _scale));
+      }
+      // When NOT locked: keep Game.mouseX frozen so ship doesn't jump when lock transitions
     },false);
+
+    // Click canvas to lock pointer during gameplay (only if not already locked and no UI overlay)
+    this.canvas.addEventListener('click', function() {
+      if(!Game.mobile && Game.playing && !Game.paused && !Game.shipSelectOpen) {
+        var _isLocked = document.pointerLockElement === Game.canvas ||
+                        document.mozPointerLockElement === Game.canvas ||
+                        document.webkitPointerLockElement === Game.canvas;
+        if(!_isLocked) {
+          var _rpl = Game.canvas.requestPointerLock || Game.canvas.mozRequestPointerLock || Game.canvas.webkitRequestPointerLock;
+          if(_rpl) _rpl.call(Game.canvas);
+        }
+      }
+    }, false);
+
+    // If pointer lock is released externally, auto-pause — but NOT during ship selection
+    document.addEventListener('pointerlockchange', function() {
+      var _locked = document.pointerLockElement === Game.canvas ||
+                    document.mozPointerLockElement === Game.canvas ||
+                    document.webkitPointerLockElement === Game.canvas;
+      if(!_locked && Game.playing && !Game.shipSelectOpen) Game.paused = true;
+    }, false);
+    document.addEventListener('mozpointerlockchange', function() {
+      var _locked = document.mozPointerLockElement === Game.canvas;
+      if(!_locked && Game.playing && !Game.shipSelectOpen) Game.paused = true;
+    }, false);
 
     // Left click = fire
     this.canvas.addEventListener('mousedown',function(e) {
@@ -196,9 +281,30 @@ var Game = new function() {
 
     for(var i=0,len = boards.length;i<len;i++) {
       if(boards[i]) {
-        boards[i].step(dt);
+        if(!Game.paused) boards[i].step(dt);
         boards[i].draw(Game.ctx);
       }
+    }
+
+    // Pause overlay
+    if(Game.paused && Game.playing && !Game.shipSelectOpen) {
+      var _pCtx = Game.ctx;
+      _pCtx.save();
+      _pCtx.fillStyle = 'rgba(0,0,0,0.58)';
+      _pCtx.fillRect(0, 0, Game.width, Game.height);
+      _pCtx.textAlign = 'center';
+      var _pFS = Math.max(16, Math.round(Game.width / 14));
+      _pCtx.font = 'bold ' + _pFS + 'px Uncial Antiqua, Arial Black, Arial';
+      _pCtx.shadowColor = '#00BBFF';
+      _pCtx.shadowBlur = 22;
+      _pCtx.fillStyle = '#FFFFFF';
+      _pCtx.fillText('PAUSED', Game.width / 2, Game.height / 2 - 8);
+      _pCtx.shadowBlur = 0;
+      var _pFS2 = Math.max(10, Math.round(Game.width / 28));
+      _pCtx.font = _pFS2 + 'px Uncial Antiqua, Arial Black, Arial';
+      _pCtx.fillStyle = '#AAAAAA';
+      _pCtx.fillText('SPACE \u2014 resume   ESC \u2014 release mouse', Game.width / 2, Game.height / 2 + _pFS + 4);
+      _pCtx.restore();
     }
 
     Game.ctx.restore();
@@ -210,53 +316,325 @@ var Game = new function() {
 
 
   this.setupMobile = function() {
-    var container = document.getElementById("container"),
-        hasTouch =  !!('ontouchstart' in window),
-        w = window.innerWidth, h = window.innerHeight;
-      
-    if(hasTouch) { this.mobile = true; }
+    var hasTouch = !!('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    if (hasTouch) { this.mobile = true; }
+    if (!hasTouch) { return false; }
 
-    if(screen.width >= 1280 || !hasTouch) { return false; }
+    var canvas = this.canvas;
 
-    if(w > h) {
-      alert("Please rotate the device and then click OK");
-      w = window.innerWidth; h = window.innerHeight;
+    // Lock body to prevent scroll / bounce
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width    = '100%';
+    document.body.style.height   = '100%';
+
+    // Reset container so canvas can be fixed-positioned freely
+    var container = document.getElementById('container');
+    if (container) {
+      container.style.padding = '0';
+      container.style.margin  = '0';
+      container.style.width   = '100%';
+      container.style.height  = '100%';
     }
 
-    container.style.height = h*2 + "px";
-    window.scrollTo(0,1);
-
-    h = window.innerHeight + 2;
-    container.style.height = h + "px";
-    container.style.width = w + "px";
-    container.style.padding = 0;
-
-    if(h >= this.canvas.height * 1.75 || w >= this.canvas.height * 1.75) {
-      this.canvasMultiplier = 2;
-      this.canvas.width = w / 2;
-      this.canvas.height = h / 2;
-      this.canvas.style.width = w + "px";
-      this.canvas.style.height = h + "px";
-    } else {
-      this.canvas.width = w;
-      this.canvas.height = h;
+    // Scale canvas to 90% of viewport (10% smaller — thin black border on all sides)
+    function fitCanvas() {
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var cw = 320; // logical width is always 320
+      var cssW = Math.floor(vw * 0.90);
+      var cssH = Math.floor(vh * 0.90);
+      var scale = cssW / cw;
+      var newH = Math.ceil(cssH / scale);
+      canvas.width  = cw;
+      canvas.height = newH;
+      Game.width    = cw;
+      Game.height   = newH;
+      Game.spriteScale = 1.0; // mobile: sprites stay at baseline size
+      canvas.style.width    = cssW + 'px';
+      canvas.style.height   = cssH + 'px';
+      canvas.style.position = 'fixed';
+      canvas.style.left     = Math.floor((vw - cssW) / 2) + 'px';
+      canvas.style.top      = Math.floor((vh - cssH) / 2) + 'px';
+      canvas.style.display  = 'block';
     }
 
-    this.canvas.style.position='absolute';
-    this.canvas.style.left="0px";
-    this.canvas.style.top="0px";
+    // Show/hide portrait-only overlay
+    function checkOrientation() {
+      var overlay = document.getElementById('rotate-overlay');
+      if (!overlay) return;
+      var landscape = window.innerWidth > window.innerHeight;
+      var small     = Math.min(window.innerWidth, window.innerHeight) < 600;
+      overlay.style.display = (landscape && small) ? 'flex' : 'none';
+    }
 
+    fitCanvas();
+    checkOrientation();
+    window.addEventListener('resize', function() { fitCanvas(); checkOrientation(); });
+    window.addEventListener('orientationchange', function() {
+      setTimeout(function() { fitCanvas(); checkOrientation(); }, 300);
+    });
   };
 
 };
 
+
+// =====================================================================
+// LOADING SCREEN — shown while sprites load
+// =====================================================================
+var LoadingScreen = function() {
+  this.progress = 0;
+  this.t = 0;
+  // Shooting stars (meteors) — many falling simultaneously
+  var _ssColors = [[255,255,255],[180,220,255],[255,240,200],[200,200,255],[150,210,255],[255,200,180]];
+  this.shootingStars = [];
+  var _ssCount = Math.min(55, Math.max(25, Math.round(30 * (Game.width * Game.height) / (320 * 480))));
+  function _makeSSOffsets(segs, maxOff) {
+    var offs = [];
+    for(var k = 0; k <= segs; k++) offs.push((Math.random() - 0.5) * 2 * maxOff);
+    offs[0] = 0; offs[segs] = 0; // endpoints always on the line
+    return offs;
+  }
+  for(var i = 0; i < _ssCount; i++) {
+    var _rgb = _ssColors[Math.floor(Math.random() * _ssColors.length)];
+    var _segs = 7 + Math.floor(Math.random() * 6);
+    var _maxOff = 2.5 + Math.random() * 5;
+    this.shootingStars.push({
+      x:      Math.random() * (Game.width  || 320),
+      y:      Math.random() * (Game.height || 480),
+      speed:  260 + Math.random() * 340,
+      ang:    0.38 + Math.random() * 0.55,
+      len:    90  + Math.random() * 180,   // longer trails
+      alpha:  0.5 + Math.random() * 0.5,
+      r: _rgb[0], g: _rgb[1], b: _rgb[2],
+      delay:  Math.random() * 1.5,
+      segs:   _segs,
+      maxOff: _maxOff,
+      offsets: _makeSSOffsets(_segs, _maxOff)
+    });
+  }
+  // Nebula blobs (pink/purple/blue — same palette as Starfield)
+  var _nPalettes = [
+    ['rgba(180,60,140,','rgba(110,20,90,','rgba(55,5,50,'],
+    ['rgba(40,55,185,', 'rgba(20,30,130,','rgba(8,10,70,'],
+    ['rgba(130,40,170,','rgba(80,15,115,','rgba(35,5,60,'],
+    ['rgba(60,100,210,','rgba(30,55,155,','rgba(10,18,75,'],
+    ['rgba(170,50,130,','rgba(100,20,90,','rgba(45,5,55,']
+  ];
+  this.nebulae = [];
+  for(var n = 0; n < 6; n++) {
+    var pal = _nPalettes[Math.floor(Math.random() * _nPalettes.length)];
+    this.nebulae.push({
+      xr: Math.random(), yr: Math.random(),
+      rad: 0.22 + Math.random() * 0.28,
+      c0: pal[0], c1: pal[1], c2: pal[2],
+      phase: Math.random() * Math.PI * 2,
+      spd: 0.07 + Math.random() * 0.10
+    });
+  }
+  // Floating energy particles (same as TitleScreen)
+  this.particles = [];
+  var _pColors = ['#00FFFF','#FF44FF','#FFFF44','#FF8800','#00FF88','#FF4466'];
+  for(var j = 0; j < 45; j++) {
+    this.particles.push({
+      x: Math.random() * (Game.width || 320),
+      y: Math.random() * (Game.height || 480),
+      vx: (Math.random() - 0.5) * 22,
+      vy: -(4 + Math.random() * 18),
+      size: 0.8 + Math.random() * 2.2,
+      alpha: 0.3 + Math.random() * 0.6,
+      color: _pColors[Math.floor(Math.random() * _pColors.length)]
+    });
+  }
+};
+LoadingScreen.prototype.step = function(dt) {
+  this.t += dt;
+  var w = Game.width, h = Game.height;
+  // Particles
+  for(var i = 0; i < this.particles.length; i++) {
+    var p = this.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if(p.y < -6)  { p.y = h + 6; p.x = Math.random() * w; }
+    if(p.x < 0)   p.x = w;
+    if(p.x > w)   p.x = 0;
+  }
+  // Shooting stars
+  for(var j = 0; j < this.shootingStars.length; j++) {
+    var ss = this.shootingStars[j];
+    if(ss.delay > 0) { ss.delay -= dt; continue; }
+    ss.x += Math.cos(ss.ang) * ss.speed * dt;
+    ss.y += Math.sin(ss.ang) * ss.speed * dt;
+    if(ss.x > w + ss.len || ss.y > h + ss.len) {
+      // Respawn at top or left edge
+      if(Math.random() < 0.6) { ss.x = Math.random() * w; ss.y = -ss.len; }
+      else                    { ss.x = -ss.len; ss.y = Math.random() * h * 0.6; }
+      ss.speed = 260 + Math.random() * 340;
+      ss.ang   = 0.38 + Math.random() * 0.55;
+      ss.len   = 90  + Math.random() * 180;
+      ss.alpha = 0.45 + Math.random() * 0.55;
+      ss.segs  = 7 + Math.floor(Math.random() * 6);
+      ss.maxOff = 2.5 + Math.random() * 5;
+      ss.offsets = [];
+      for(var k=0; k<=ss.segs; k++) ss.offsets.push((Math.random()-0.5)*2*ss.maxOff);
+      ss.offsets[0] = 0; ss.offsets[ss.segs] = 0;
+    }
+  }
+};
+LoadingScreen.prototype.setProgress = function(ratio) {
+  this.progress = Math.max(this.progress, ratio);
+};
+LoadingScreen.prototype.draw = function(ctx) {
+  var w = Game.width, h = Game.height;
+  // Scale based on height so it looks proportional at any resolution
+  var sc = Math.min(2.0, Math.max(1.0, Game.height / 480));
+
+  // Dark space background
+  ctx.fillStyle = '#020208';
+  ctx.fillRect(0, 0, w, h);
+
+  // Nebula blobs (pink/purple/blue)
+  ctx.save();
+  for(var n = 0; n < this.nebulae.length; n++) {
+    var nb = this.nebulae[n];
+    var pulse = 0.65 + 0.35 * Math.sin(this.t * nb.spd + nb.phase);
+    var nr = Math.min(w, h) * nb.rad * pulse;
+    var nx = nb.xr * w, ny = nb.yr * h;
+    var op = 0.25 * pulse;
+    var rg = ctx.createRadialGradient(nx, ny, 0, nx, ny, nr);
+    rg.addColorStop(0,    nb.c0 + (op * 0.90) + ')');
+    rg.addColorStop(0.45, nb.c1 + (op * 0.48) + ')');
+    rg.addColorStop(0.78, nb.c2 + (op * 0.20) + ')');
+    rg.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.arc(nx, ny, nr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Shooting stars (meteors)
+  ctx.save();
+  for(var si = 0; si < this.shootingStars.length; si++) {
+    var ss = this.shootingStars[si];
+    if(ss.delay > 0) continue;
+    var _dx = Math.cos(ss.ang), _dy = Math.sin(ss.ang);
+    var _px = -_dy, _py = _dx; // perpendicular unit vector
+    var tailX = ss.x - _dx * ss.len;
+    var tailY = ss.y - _dy * ss.len;
+    var sGrad = ctx.createLinearGradient(tailX, tailY, ss.x, ss.y);
+    sGrad.addColorStop(0, 'rgba(' + ss.r + ',' + ss.g + ',' + ss.b + ',0)');
+    sGrad.addColorStop(1, 'rgba(' + ss.r + ',' + ss.g + ',' + ss.b + ',' + ss.alpha + ')');
+    ctx.beginPath();
+    var _segs = ss.segs || 8;
+    var _offs = ss.offsets || [];
+    for(var _seg = 0; _seg <= _segs; _seg++) {
+      var _t = _seg / _segs;
+      var _cx = tailX + _dx * ss.len * _t;
+      var _cy = tailY + _dy * ss.len * _t;
+      var _env = Math.sin(_t * Math.PI); // 0 at endpoints, 1 at midpoint
+      var _off = (_offs[_seg] || 0) * _env;
+      _cx += _px * _off; _cy += _py * _off;
+      if(_seg === 0) ctx.moveTo(_cx, _cy); else ctx.lineTo(_cx, _cy);
+    }
+    ctx.strokeStyle = sGrad;
+    ctx.lineWidth = 1.6;
+    ctx.shadowColor = 'rgba(' + ss.r + ',' + ss.g + ',' + ss.b + ',0.7)';
+    ctx.shadowBlur = 6;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Energy particles (floating upward, same as TitleScreen)
+  ctx.save();
+  for(var j = 0; j < this.particles.length; j++) {
+    var p = this.particles[j];
+    var flicker = 0.35 + 0.65 * Math.abs(Math.sin(this.t * 1.7 + j * 0.9));
+    ctx.globalAlpha = p.alpha * flicker;
+    ctx.fillStyle = p.color;
+    ctx.shadowColor = p.color;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Title glow pulse
+  var glow = (10 + 8 * Math.sin(this.t * 2.2)) * sc;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = '#0088FF';
+  ctx.shadowBlur = glow;
+  ctx.fillStyle = '#00DDFF';
+  ctx.font = 'bold ' + Math.round(50 * sc) + 'px Uncial Antiqua, Arial Black, Arial';
+  var titleY = h * 0.28;
+  ctx.fillText('ALIEN', w / 2, titleY);
+  ctx.fillText('INVASION', w / 2, titleY + Math.round(56 * sc));
+  ctx.shadowBlur = 0;
+
+  // Author line
+  ctx.font = Math.round(13 * sc) + 'px Arial';
+  ctx.fillStyle = 'rgba(140, 200, 255, 0.75)';
+  ctx.fillText('by Georgios Chimonides', w / 2, titleY + Math.round(98 * sc));
+
+  // Progress bar
+  var barW = w * 0.72;
+  var barH = Math.max(6, Math.round(10 * sc));
+  var barX = (w - barW) / 2;
+  var barY = h * 0.65;
+  var barR = barH / 2; // corner radius
+
+  // Bar track
+  ctx.fillStyle = 'rgba(0, 50, 90, 0.65)';
+  _roundRect(ctx, barX, barY, barW, barH, barR);
+  ctx.fill();
+
+  // Green fill
+  var fillW = barW * Math.min(1, this.progress);
+  if(fillW > barR * 2) {
+    var grad = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
+    grad.addColorStop(0, '#008833');
+    grad.addColorStop(1, '#00FF88');
+    ctx.fillStyle = grad;
+    ctx.shadowColor = '#00FF66';
+    ctx.shadowBlur = Math.round(8 * sc);
+    _roundRect(ctx, barX, barY, fillW, barH, barR);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // Percentage text
+  ctx.font = Math.round(11 * sc) + 'px Arial';
+  ctx.fillStyle = 'rgba(160, 230, 200, 0.85)';
+  ctx.fillText('Loading... ' + Math.round(this.progress * 100) + '%', w / 2, barY + barH + Math.round(16 * sc));
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+};
+
+// Helper: rounded rectangle path
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+// =====================================================================
 
 var SpriteSheet = new function() {
   this.map = { };
   this.images = {}; // Store multiple images
   this.image = null; // Default image
 
-  this.load = function(spriteData,callback) {
+  this.load = function(spriteData, callback, progressCallback) {
     this.map = spriteData;
 
     // Collect unique image files in an array
@@ -264,7 +642,7 @@ var SpriteSheet = new function() {
     var addedFiles = {};
 
     for(var key in spriteData) {
-      var file = spriteData[key].file || 'images/sprites.png';
+      var file = spriteData[key].file || 'images/sprites.webp';
       if(!addedFiles[file]) {
         addedFiles[file] = true;
         imageFiles.push(file);
@@ -288,10 +666,11 @@ var SpriteSheet = new function() {
         img.onload = function() {
           self.images[file] = img;
           // Also set as default image for backward compatibility
-          if(file === 'images/sprites.png') {
+          if(file === 'images/sprites.webp') {
             self.image = img;
           }
           loadedCount++;
+          if(progressCallback) progressCallback(loadedCount / totalImages);
           if(loadedCount === totalImages && callback) {
             callback();
           }
@@ -299,6 +678,7 @@ var SpriteSheet = new function() {
         img.onerror = function() {
           console.log('Failed to load image: ' + file);
           loadedCount++;
+          if(progressCallback) progressCallback(loadedCount / totalImages);
           if(loadedCount === totalImages && callback) {
             callback();
           }
@@ -396,7 +776,7 @@ var TitleScreen = function TitleScreen(title,subtitle,callback) {
     var pulse = 0.72 + 0.28 * Math.sin(t * 2.3);
 
     ctx.save();
-    ctx.font = 'bold ' + titleSize + 'px Bangers, Arial Black, Arial';
+    ctx.font = 'bold ' + titleSize + 'px Uncial Antiqua, Arial Black, Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
@@ -433,6 +813,38 @@ var TitleScreen = function TitleScreen(title,subtitle,callback) {
     ctx.shadowBlur = 14 * subPulse;
     ctx.fillStyle = '#FFFF55';
     ctx.fillText(subtitle, Game.width / 2, titleY + titleSize * 1.35);
+    ctx.restore();
+
+    // ---- Author / copyright — just below the subtitle ----
+    var creditFade = 0.55 + 0.2 * Math.sin(t * 1.1);
+    var creditY = titleY + titleSize * 2.1;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // "Created by"
+    ctx.font = 'bold 10px Arial';
+    ctx.globalAlpha = creditFade * 0.70;
+    ctx.shadowColor = '#88AAFF';
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = '#AACCFF';
+    ctx.fillText('Created by', Game.width / 2, creditY);
+
+    // "Georgios Chimonides"
+    ctx.font = 'bold 14px Arial';
+    ctx.globalAlpha = creditFade;
+    ctx.shadowColor = '#AADDFF';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('Georgios Chimonides', Game.width / 2, creditY + 18);
+
+    // "© 2026  All rights reserved"
+    ctx.font = '9px Arial';
+    ctx.globalAlpha = creditFade * 0.70;
+    ctx.shadowColor = '#6688CC';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#8899BB';
+    ctx.fillText('\u00A9 2026  \u2022  All rights reserved', Game.width / 2, creditY + 33);
     ctx.restore();
   };
 };
@@ -496,11 +908,18 @@ var GameBoard = function() {
     return false;
   };
 
-  // Call step on all objects and them delete
+  // Call step on all objects and then delete
   // any object that have been marked for removal
-  this.step = function(dt) { 
+  // If Game.timeSlowFactor < 1, enemies/enemy-projectiles get reduced dt
+  this.step = function(dt) {
     this.resetRemoved();
-    this.iterate('step',dt);
+    var slowF = (typeof Game !== 'undefined' && Game.timeSlowFactor) ? Game.timeSlowFactor : 1.0;
+    for(var i = 0, len = this.objects.length; i < len; i++) {
+      var obj = this.objects[i];
+      // OBJECT_ENEMY=4, OBJECT_ENEMY_PROJECTILE=8 → bitmask 12
+      var objDt = (slowF < 1.0 && obj.type && (obj.type & 12)) ? dt * slowF : dt;
+      obj.step(objDt);
+    }
     this.finalizeRemoved();
   };
 
@@ -550,8 +969,9 @@ Sprite.prototype.setup = function(sprite,props) {
   this.sprite = sprite;
   this.merge(props);
   this.frame = this.frame || 0;
-  this.w =  SpriteSheet.map[sprite].w;
-  this.h =  SpriteSheet.map[sprite].h;
+  var _ss = Game.spriteScale || 1.0;
+  this.w = Math.round(SpriteSheet.map[sprite].w * _ss);
+  this.h = Math.round(SpriteSheet.map[sprite].h * _ss);
 };
 
 Sprite.prototype.merge = function(props) {
@@ -563,7 +983,7 @@ Sprite.prototype.merge = function(props) {
 };
 
 Sprite.prototype.draw = function(ctx) {
-  SpriteSheet.draw(ctx,this.sprite,this.x,this.y,this.frame);
+  SpriteSheet.draw(ctx,this.sprite,this.x,this.y,this.frame,this.w,this.h);
 };
 
 Sprite.prototype.hit = function(damage) {
@@ -614,6 +1034,22 @@ Level.prototype.step = function(dt) {
         var fr = new FallingRow(override || {});
         fr.init(this.board);
         curShip[0] = curShip[1] + 1;
+      } else if(type === 'zigzag_enemy') {
+        // Spawn a ZigZagEnemy (sin-wave movement)
+        var zSpr = (override && override.sprite) || pickAlien(2);
+        var zX   = override && override.x !== undefined ? (override.x / 320) * Game.width : Game.width * (0.15 + Math.random() * 0.7);
+        this.board.add(new ZigZagEnemy(zSpr, zX));
+        curShip[0] += curShip[2];
+      } else if(type === 'spiral_enemy') {
+        // Spawn a SpiralEnemy (rotation-based spiral path)
+        var sSpr = (override && override.sprite) || pickAlien(5);
+        var sX   = override && override.x !== undefined ? (override.x / 320) * Game.width : Game.width * (0.15 + Math.random() * 0.7);
+        this.board.add(new SpiralEnemy(sSpr, sX));
+        curShip[0] += curShip[2];
+      } else if(type === 'alien_head') {
+        // Spawn an AlienHeadEnemy (portrait alien face, 10 movement patterns)
+        this.board.add(new AlienHeadEnemy(override || {}));
+        curShip[0] += curShip[2];
       } else {
         // Normal enemy spawn
         var enemy = enemies[type];
@@ -655,81 +1091,267 @@ Level.prototype.draw = function(ctx) { };
 
 var TouchControls = function() {
 
-  var gutterWidth = 10;
-  var unitWidth = Game.width/5;
-  var blockWidth = unitWidth-gutterWidth;
+  // Control bar at the bottom
+  var ctrlH = 66;
 
-  this.drawSquare = function(ctx,x,y,txt,on) {
-    ctx.globalAlpha = on ? 0.9 : 0.6;
-    ctx.fillStyle =  "#CCC";
-    ctx.fillRect(x,y,blockWidth,blockWidth);
+  // Layout: BOMB left, FIRE right — smaller buttons, more screen for drag movement
+  function layout() {
+    var cy = Game.height - ctrlH;
+    return {
+      ctrlY:   cy,
+      btnBomb: { x: 10,  y: cy + 5, w: 126, h: ctrlH - 10 },
+      btnFire: { x: 184, y: cy + 5, w: 126, h: ctrlH - 10 }
+    };
+  }
 
-    ctx.fillStyle = "#FFF";
-    ctx.globalAlpha = 1.0;
-    ctx.font = "bold " + (3*unitWidth/4) + "px arial";
+  // Drag tracking for MOVE zone
+  var moveTouch = null; // { id, startX, currentX }
+  var MOVE_DEAD = 3;    // px dead zone — almost instant response
+  var MOVE_MAX  = 32;   // px for full speed — short drag = max speed
+  Game.mobileMoveX = 0;
 
-    var txtSize = ctx.measureText(txt);
+  // Multi-touch tracking for BOMB/FIRE buttons
+  var activeTouches = {};
 
-    ctx.fillText(txt, 
-                 x+blockWidth/2-txtSize.width/2, 
-                 y+3*blockWidth/4+5);
-  };
+  function canvasPos(touch) {
+    var rect = Game.canvas.getBoundingClientRect();
+    return {
+      x: (touch.clientX - rect.left) * (Game.canvas.width  / rect.width),
+      y: (touch.clientY - rect.top)  * (Game.canvas.height / rect.height)
+    };
+  }
 
-  this.draw = function(ctx) {
-    ctx.save();
+  function hitTest(btn, x, y) {
+    return x >= btn.x && x <= btn.x + btn.w &&
+           y >= btn.y && y <= btn.y + btn.h;
+  }
 
-    var yLoc = Game.height - unitWidth;
-    this.drawSquare(ctx,gutterWidth,yLoc,"\u25C0", Game.keys['left']);
-    this.drawSquare(ctx,unitWidth + gutterWidth,yLoc,"\u25B6", Game.keys['right']);
-    this.drawSquare(ctx,4*unitWidth,yLoc,"A",Game.keys['fire']);
+  function zoneAt(x, y) {
+    var L = layout();
+    if (hitTest(L.btnBomb, x, y)) return 'rocket';
+    if (hitTest(L.btnFire, x, y)) return 'fire';
+    return 'move'; // anywhere else on screen = drag to move
+  }
 
-    ctx.restore();
-  };
-
-  this.step = function(dt) { };
+  function updateMoveX() {
+    if (!moveTouch) { Game.mobileMoveX = 0; return; }
+    var dx = moveTouch.currentX - moveTouch.startX;
+    if (Math.abs(dx) < MOVE_DEAD) { Game.mobileMoveX = 0; return; }
+    Game.mobileMoveX = Math.max(-1, Math.min(1, dx / MOVE_MAX));
+  }
 
   this.trackTouch = function(e) {
-    var touch, x;
-
     e.preventDefault();
-    Game.keys['left'] = false;
-    Game.keys['right'] = false;
-    for(var i=0;i<e.targetTouches.length;i++) {
-      touch = e.targetTouches[i];
-      x = touch.pageX / Game.canvasMultiplier - Game.canvas.offsetLeft;
-      if(x < unitWidth) {
-        Game.keys['left'] = true;
-      } 
-      if(x > unitWidth && x < 2*unitWidth) {
-        Game.keys['right'] = true;
-      } 
-    }
+    var changed = e.changedTouches;
 
-    if(e.type == 'touchstart' || e.type == 'touchend') {
-      for(i=0;i<e.changedTouches.length;i++) {
-        touch = e.changedTouches[i];
-        x = touch.pageX / Game.canvasMultiplier - Game.canvas.offsetLeft;
-        if(x > 4 * unitWidth) {
-          Game.keys['fire'] = (e.type == 'touchstart');
+    for (var i = 0; i < changed.length; i++) {
+      var t   = changed[i];
+      var pos = canvasPos(t);
+      var id  = t.identifier;
+
+      if (e.type === 'touchstart') {
+        var z = zoneAt(pos.x, pos.y);
+        if (!z) continue;
+        if (z === 'move') {
+          if (!moveTouch) {
+            moveTouch = { id: id, startX: pos.x, currentX: pos.x };
+            Game.mobileMoveX = 0;
+          }
+        } else {
+          activeTouches[id] = z;
+          Game.keys[z] = true;
+        }
+
+      } else if (e.type === 'touchmove') {
+        // Update drag movement
+        if (moveTouch && id === moveTouch.id) {
+          moveTouch.currentX = pos.x;
+          updateMoveX();
+        }
+
+      } else if (e.type === 'touchend' || e.type === 'touchcancel') {
+        if (moveTouch && id === moveTouch.id) {
+          moveTouch = null;
+          Game.mobileMoveX = 0;
+        } else {
+          var z = activeTouches[id];
+          delete activeTouches[id];
+          if (z) {
+            var held = false;
+            for (var tid in activeTouches) {
+              if (activeTouches[tid] === z) { held = true; break; }
+            }
+            if (!held) Game.keys[z] = false;
+          }
         }
       }
     }
   };
 
-  Game.canvas.addEventListener('touchstart',this.trackTouch,true);
-  Game.canvas.addEventListener('touchmove',this.trackTouch,true);
-  Game.canvas.addEventListener('touchend',this.trackTouch,true);
+  // ── Drawing ──────────────────────────────────────────────────────────────
 
-  // For Android
-  Game.canvas.addEventListener('dblclick',function(e) { e.preventDefault(); },true);
-  Game.canvas.addEventListener('click',function(e) { e.preventDefault(); },true);
+  this.draw = function(ctx) {
+    var L = layout();
+    ctx.save();
 
-  Game.playerOffset = unitWidth + 20;
+    // Dark glass control bar background
+    ctx.fillStyle = 'rgba(0,4,20,0.78)';
+    ctx.fillRect(0, L.ctrlY, Game.width, ctrlH);
+
+    // Glowing separator line
+    ctx.strokeStyle = 'rgba(0,180,255,0.28)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, L.ctrlY);
+    ctx.lineTo(Game.width, L.ctrlY);
+    ctx.stroke();
+
+    drawBtn(ctx, L.btnBomb, '\u2606', 'BOMB', Game.keys['rocket'], '#FF8800');
+    drawBtn(ctx, L.btnFire, '\u25B2', 'FIRE', Game.keys['fire'],   '#00CCFF');
+
+    ctx.restore();
+  };
+
+  function drawMoveZone(ctx, zone) {
+    var x = zone.x, y = zone.y, w = zone.w, h = zone.h;
+    var mx = Game.mobileMoveX || 0;
+    var active = Math.abs(mx) > 0.05;
+    var color = '#3377FF';
+
+    // Background fill
+    ctx.globalAlpha = active ? 0.90 : 0.52;
+    var grad = ctx.createLinearGradient(x, y, x, y + h);
+    if (active) {
+      grad.addColorStop(0, color);
+      grad.addColorStop(1, 'rgba(0,0,10,0.88)');
+    } else {
+      grad.addColorStop(0, 'rgba(18,28,52,0.92)');
+      grad.addColorStop(1, 'rgba(5,10,22,0.92)');
+    }
+    ctx.fillStyle = grad;
+    roundRect(ctx, x, y, w, h, 9);
+    ctx.fill();
+
+    // Border
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.strokeStyle = active ? color : 'rgba(0,140,210,0.32)';
+    if (active) { ctx.shadowColor = color; ctx.shadowBlur = 14; }
+    roundRect(ctx, x, y, w, h, 9);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    var midX = x + w / 2;
+    var cy   = y + h * 0.38;
+    var iconSz = Math.min(h * 0.42, 20);
+    ctx.font = 'bold ' + iconSz + 'px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Left arrow — brightens when moving left
+    ctx.globalAlpha = mx < -0.1 ? 1.0 : 0.40;
+    ctx.fillStyle   = mx < -0.1 ? '#ffffff' : 'rgba(130,175,255,0.70)';
+    if (mx < -0.1) { ctx.shadowColor = color; ctx.shadowBlur = 10; }
+    ctx.fillText('\u25C4', midX - 28, cy);
+    ctx.shadowBlur = 0;
+
+    // Right arrow — brightens when moving right
+    ctx.globalAlpha = mx > 0.1 ? 1.0 : 0.40;
+    ctx.fillStyle   = mx > 0.1 ? '#ffffff' : 'rgba(130,175,255,0.70)';
+    if (mx > 0.1) { ctx.shadowColor = color; ctx.shadowBlur = 10; }
+    ctx.fillText('\u25BA', midX + 28, cy);
+    ctx.shadowBlur = 0;
+
+    // Sliding indicator dot
+    ctx.globalAlpha = active ? 0.85 : 0.35;
+    var dotX = midX + mx * (w * 0.30);
+    ctx.fillStyle = active ? '#44AAFF' : '#223355';
+    ctx.shadowColor = active ? '#44AAFF' : 'transparent';
+    ctx.shadowBlur  = active ? 10 : 0;
+    ctx.beginPath();
+    ctx.arc(dotX, y + h * 0.76, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Label
+    ctx.globalAlpha = 0.48;
+    var lblSz = Math.max(7, Math.min(h * 0.18, 10));
+    ctx.font = 'bold ' + lblSz + 'px Arial';
+    ctx.fillStyle = 'rgba(100,160,220,0.65)';
+    ctx.textAlign = 'center';
+    ctx.fillText('MOVE', midX, y + h * 0.80);
+  }
+
+  function drawBtn(ctx, btn, icon, label, active, color) {
+    var x = btn.x, y = btn.y, w = btn.w, h = btn.h;
+
+    ctx.globalAlpha = active ? 0.94 : 0.55;
+
+    var grad = ctx.createLinearGradient(x, y, x, y + h);
+    if (active) {
+      grad.addColorStop(0, color);
+      grad.addColorStop(1, 'rgba(0,0,10,0.88)');
+    } else {
+      grad.addColorStop(0, 'rgba(18,28,52,0.92)');
+      grad.addColorStop(1, 'rgba(5,10,22,0.92)');
+    }
+    ctx.fillStyle = grad;
+    roundRect(ctx, x, y, w, h, 9);
+    ctx.fill();
+
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.strokeStyle = active ? color : 'rgba(0,140,210,0.32)';
+    if (active) { ctx.shadowColor = color; ctx.shadowBlur = 16; }
+    roundRect(ctx, x, y, w, h, 9);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = active ? '#ffffff' : 'rgba(150,195,255,0.72)';
+    var iconSz = Math.min(h * 0.46, 22);
+    ctx.font = 'bold ' + iconSz + 'px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (active) { ctx.shadowColor = color; ctx.shadowBlur = 9; }
+    ctx.fillText(icon, x + w / 2, y + h * 0.4);
+    ctx.shadowBlur = 0;
+
+    var lblSz = Math.max(7, Math.min(h * 0.19, 11));
+    ctx.font = 'bold ' + lblSz + 'px Arial';
+    ctx.fillStyle = active ? 'rgba(255,255,255,0.88)' : 'rgba(70,120,180,0.68)';
+    ctx.fillText(label, x + w / 2, y + h * 0.79);
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y,     x + w, y + r,     r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x,     y + h, x,     y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x,     y,     x + r, y,         r);
+    ctx.closePath();
+  }
+
+  this.step = function(dt) {};
+
+  var opts = { passive: false, capture: true };
+  Game.canvas.addEventListener('touchstart',  this.trackTouch, opts);
+  Game.canvas.addEventListener('touchmove',   this.trackTouch, opts);
+  Game.canvas.addEventListener('touchend',    this.trackTouch, opts);
+  Game.canvas.addEventListener('touchcancel', this.trackTouch, opts);
+  Game.canvas.addEventListener('dblclick',    function(e) { e.preventDefault(); }, true);
+
+  // Keep player ship above control bar
+  Game.playerOffset = ctrlH + 10;
 };
 
 
 var GamePoints = function() {
-  Game.points = 0;
+  // Do NOT reset Game.points here — reset happens only on new game (currentLevel===1 in playGame)
 
   var pointsLength = 8;
 
@@ -739,7 +1361,7 @@ var GamePoints = function() {
 
     // Score value - LEFT side
     var scoreSize = Math.max(14, Math.floor(Game.width / 32));
-    ctx.font = 'bold ' + scoreSize + 'px Bangers, Arial';
+    ctx.font = 'bold ' + scoreSize + 'px Uncial Antiqua, Bangers, Arial';
     ctx.textAlign = 'left';
     var txt = '' + Game.points;
     var zeros = '';
@@ -749,6 +1371,7 @@ var GamePoints = function() {
     ctx.shadowBlur = 10;
     ctx.fillStyle = '#00FFFF';
     ctx.fillText(zeros + txt, 10, 8);
+    var scoreTextWidth = ctx.measureText(zeros + txt).width;
 
     // High score - LEFT side, below score
     var hiSize = Math.max(9, Math.floor(Game.width / 55));
@@ -761,22 +1384,22 @@ var GamePoints = function() {
       ctx.fillText('HI: ' + highScore, 10, scoreSize + 12);
     }
 
-    // === COMBO MULTIPLIER DISPLAY (centered, at top of screen) - NO TIMER BAR ===
+    // === COMBO MULTIPLIER DISPLAY — right of score, same line, 100px gap ===
     if(typeof comboMult !== 'undefined' && comboMult > 1 && typeof comboTimer !== 'undefined' && comboTimer > 0) {
       var fadeAlpha = Math.min(1, comboTimer * 3);
       var comboSize = Math.max(16, Math.floor(Game.width / 28));
       ctx.globalAlpha = fadeAlpha;
-      ctx.font = 'bold ' + comboSize + 'px Bangers, Arial';
-      ctx.textAlign = 'center';
+      ctx.font = 'bold ' + comboSize + 'px Uncial Antiqua, Bangers, Arial';
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       var comboColor = comboMult >= 6 ? '#FF4400' : comboMult >= 4 ? '#FF8800' : '#FFCC00';
       ctx.shadowColor = comboColor;
       ctx.shadowBlur = 18;
       ctx.fillStyle = comboColor;
-      ctx.fillText(comboMult + 'x COMBO', Game.width / 2, 6); // Top of screen, no bar
+      ctx.fillText(comboMult + 'x COMBO', 10 + scoreTextWidth + 100, 8);
     }
 
-    // === POWER-UP TIMER BARS (left side, below high score) ===
+    // === POWER-UP TIMER BARS (left side, below hi-score) ===
     if(typeof playerShip !== 'undefined' && playerShip) {
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;

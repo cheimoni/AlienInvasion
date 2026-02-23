@@ -48,21 +48,33 @@ table {
 }
 
 
-/* Center the container */
+/* Prevent touch scroll / zoom / selection on mobile */
+html, body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  background: #000;
+  height: 100%;
+}
+
+/* Center the container (desktop) */
 #container {
-  padding-top:50px;
-  margin:0 auto;
-  width:480px;
+  padding-top: 50px;
+  margin: 0 auto;
+  width: 480px;
 }
 
-/* Give canvas a background - initially hidden to prevent black flash */
+/* Give canvas a background */
 canvas {
-  background-color:black;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-canvas.game-ready {
-  opacity: 1;
+  background-color: black;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Crisp pixel rendering when scaled up on mobile */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
  
