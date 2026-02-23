@@ -3099,6 +3099,7 @@ var playGame = function() {
 
   board.add(new Level(levelData, function() {
     // Level complete callback
+    playerShip = null; // Prevent S-key ship select during transition/wheel screens
     if(infiniteLoopMode || currentLevel < maxLevel) {
       currentLevel++;
       SoundManager.playLevelComplete();
@@ -5800,6 +5801,13 @@ Enemy.prototype.step = function(dt) {
       if(this.motherTrail.length > 10) this.motherTrail.shift();
     }
 
+  } else if(this.movementType === 'split_flee') {
+    // SPLIT BOSS: burst outward from mothership, arc up, then fall back down toward player
+    this.vx *= Math.pow(0.03, dt);    // rapid horizontal deceleration
+    if(this.t > 0.6) this.vy += 110 * dt; // gravity kicks in after initial upward burst
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+
   } else {
     // DEFAULT: parametric sine movement (for mother ships etc)
     this.vx = this.A + this.B * Math.sin(this.C * this.t + this.D);
@@ -5908,6 +5916,32 @@ Enemy.prototype.hit = function(damage) {
         }
         earnPoints(this.board, cx, cy - 50, this.points || 500);
         this.board.add(new PowerUp(cx, cy));
+
+        // Split mechanic: 65% chance mothership breaks into 2 mini-bosses
+        if(this.isMotherShip && Math.random() < 0.65) {
+          var _splitPool = ['alien_boss_cockroach','alien_boss_ant','alien_boss_flea',
+                            'alien_boss_ladybug','alien_boss_cricket','alien_boss_stinkbug',
+                            'alien_boss_leafhopper','alien_boss_termite'];
+          var _splitSz  = Math.round(Math.min(this.w * 0.40, 90));
+          var _splitH   = Math.round((this.maxHealth || 800) * 0.30);
+          var _splitPts = Math.round((this.points || 500) * 0.18);
+          var _spB = this.board;
+          function _rndSpl() { return _splitPool[Math.floor(Math.random() * _splitPool.length)]; }
+          // Left mini-boss
+          _spB.add(new Enemy(
+            { sprite: _rndSpl(), health: _splitH, points: _splitPts,
+              movementType: 'split_flee', missiles: 1, reloadTime: 2.2, damage: 1 },
+            { x: cx - _splitSz, y: cy - _splitSz * 0.5,
+              vx: -220, vy: -100, w: _splitSz, h: _splitSz }
+          ));
+          // Right mini-boss
+          _spB.add(new Enemy(
+            { sprite: _rndSpl(), health: _splitH, points: _splitPts,
+              movementType: 'split_flee', missiles: 1, reloadTime: 2.2, damage: 1 },
+            { x: cx + _splitSz * 0.5, y: cy - _splitSz * 0.5,
+              vx:  220, vy: -100, w: _splitSz, h: _splitSz }
+          ));
+        }
       } else {
         SoundManager.playEnemyDeath();
         var ecx = this.x + this.w/2, ecy = this.y + this.h/2;
