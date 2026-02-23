@@ -1,0 +1,41 @@
+# Block large WAV source files (not referenced by code)
+# Only small alien-voice WAVs and MP3s are needed for the game
+
+# Ambient/background large WAVs
+atmospheric-space-travel-*/Atmospheric Space Travel.wav
+for-ambient-music-*/For Ambient Music.wav
+ambient-cinematic-soundscape-*/Back to Earth.wav
+futuristic-epic-sci-fi-ambient-*/Futuristic Epic Sci-Fi Ambient.wav
+futuristic-space-ambient-timelapse-*/Futuristic Space Ambient Timelapse.wav
+galaxy-*/Space.wav
+into-the-expanse-*/Into the Expanse*.wav
+mysterious-guitar-ambient-*/Puls of Stars.wav
+quiet-and-deep-ambient-landscape-*/quiet and deep ambient landscape.wav
+cinematic-space-soundscape-*/The Space Universe*.wav
+cosmos-*/Inspiring Epic Guitar Ambient.wav
+cosmos-*/Deep Space.wav
+space-ambient-timelapse-*/WAV/*.wav
+space-travel-*/Space Travel.wav
+planet-exploration-drone-*/Planet Exploration Drone.wav
+planetarium-*/Planetarium.wav
+space-and-universe-*/Space And Universe.wav
+space-angels-*/DSGNDron_*.wav
+outer-space-drone-*/Outer Space Drone/*.wav
+interstellar-voyager-dreamers-*/Luke PN*/*.wav
+
+# alien voice large ambience WAVs
+alien voice/creepy-fear-ambience-*/*.wav
+alien voice/dark-scary-ambience-*/**/*.wav
+alien voice/drone-futuristic-horror-*/*.wav
+alien voice/from-darkness-*/*.wav
+alien voice/horror-ambience-*/*.wav
+alien voice/horror-background-ambience-*/*.wav
+alien voice/horror-game-ambience-*/*.wav
+alien voice/scary-ambience-*/*.wav
+alien voice/terror-ambience-*/*.wav
+alien voice/dangerous-sinister-ambience-*/*.wav
+alien voice/atmosphere-drone-horror-*/*.wav
+
+# zip files and macOS junk
+*.zip
+__MACOSX/
