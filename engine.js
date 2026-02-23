@@ -812,7 +812,10 @@ var TitleScreen = function TitleScreen(title,subtitle,callback) {
     ctx.shadowColor = '#FFFF00';
     ctx.shadowBlur = 14 * subPulse;
     ctx.fillStyle = '#FFFF55';
-    ctx.fillText(subtitle, Game.width / 2, titleY + titleSize * 1.35);
+    var _subLines = Array.isArray(subtitle) ? subtitle : [subtitle];
+    for(var _sl = 0; _sl < _subLines.length; _sl++) {
+      ctx.fillText(_subLines[_sl], Game.width / 2, titleY + titleSize * (1.35 + _sl * 0.70));
+    }
     ctx.restore();
 
     // ---- Author / copyright — just below the subtitle ----

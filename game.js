@@ -2783,8 +2783,6 @@ var _SELECTABLE_SHIPS = [
   'player_ship_11','player_ship_12','player_ship_13','player_ship_14','player_ship_15',
   'player_ship_16','player_ship_17','player_ship_18','player_ship_19'
 ];
-var _shipSelectThreshold = 50000; // next point milestone to open panel
-
 var ShipSelectScreen = function(callback) {
   Game.paused = true;
   Game.shipSelectOpen = true;
@@ -2977,14 +2975,6 @@ var earnPoints = function(board, cx, cy, base) {
   Game.points += earned;
   board.add(new ScorePopup(cx, cy, earned, comboMult));
 
-  // Ship select every 50000 pts
-  if(Game.points >= _shipSelectThreshold && !Game.paused && playerShip) {
-    _shipSelectThreshold += 50000;
-    Game.setBoard(11, new ShipSelectScreen(function(key) {
-      if(playerShip) playerShip.changeShip(key);
-    }));
-  }
-
   // Kill-milestone: every 25 kills → +1 life (shows in heart HUD)
   sessionKills++;
   if(sessionKills >= nextLifeKills) {
@@ -3010,7 +3000,9 @@ var startGame = function() {
   if(!Game.mobile) {
     Game.setBoard(2.5,new EnergyParticlesSystem()); // Desktop only (performance)
   }
-  var startPrompt = Game.mobile ? "Tap FIRE button to start" : "Press fire to start playing";
+  var startPrompt = Game.mobile
+    ? ["Tap FIRE button to start", "Tap \u2630 to change ship"]
+    : ["Press fire to start playing", "Press [S] to change ship anytime"];
   Game.setBoard(9,new TitleScreen("Alien Invasion", startPrompt, function() {
     Game.setBoard(9, new LevelTransitionScreen(0, 1, playGame));
   }));
@@ -3060,7 +3052,6 @@ var playGame = function() {
     playerLives = PLAYER_LIVES;
     sessionKills = 0;
     nextLifeKills = 25;
-    _shipSelectThreshold = 50000;
     Game.points = 0;
     Game.godMode = false;
     Game._godComboHeld = false;
@@ -5205,11 +5196,14 @@ EnergyParticlesSystem.prototype.draw = function(ctx) {
 
 var PlayerShip = function() {
   playerShip = this;
-  this.setup('ship', { vx: 0, reloadTime: 0.25, maxVel: 200 });
+  var _defaultShip = Game._selectedShip || 'player_ship_1';
+  this.setup(_defaultShip, { vx: 0, reloadTime: 0.25, maxVel: 200 });
 
-  // 20% smaller than the auto-scaled sprite size
-  this.w = Math.round(this.w * 0.8);
-  this.h = Math.round(this.h * 0.8);
+  // Scale to consistent play size (~30px on mobile, larger on desktop)
+  var _ss = Game.spriteScale || 1.0;
+  var _base = 37 * _ss * 0.8;
+  this.w = Math.round(_base);
+  this.h = Math.round(_base);
 
   this.reload = this.reloadTime;
   this.rocketReload = 0;
@@ -6553,6 +6547,18 @@ ScorePopup.prototype.draw = function(ctx) {
 window.addEventListener("load", function() {
   activateInfiniteLoop();
   Game.initialize("game",sprites,startGame);
+});
+
+// ─── Ship select: press S at any time during gameplay ───────────────────────
+window.addEventListener('keydown', function(e) {
+  if((e.key === 's' || e.key === 'S') &&
+      Game.playing && !Game.paused && !Game.shipSelectOpen && playerShip) {
+    e.preventDefault();
+    Game.setBoard(11, new ShipSelectScreen(function(key) {
+      Game._selectedShip = key;
+      if(playerShip) playerShip.changeShip(key);
+    }));
+  }
 });
 
 // Display player lives as glowing hearts - LINE 1 (top-right)
