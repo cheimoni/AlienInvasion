@@ -4708,6 +4708,7 @@ var BackgroundObjectsSystem = function() {
         cloudDir:      isPlanet ? (Math.random() < 0.5 ? 1 : -1) : 0,
         cloudColorT:   isPlanet ? (Math.random() * 6) : 0,
         cloudColorSpd: isPlanet ? (0.12 + Math.random() * 0.20) : 0,
+        debrisRocks:   isPlanet ? _makeDebrisRocks() : null,
         // Era-change departure system
         typePool:      group.types,   // so reset can pick a fresh sprite
         normalSpeed:   objBaseSpeed,  // remember baseline for reset
@@ -4840,6 +4841,11 @@ BackgroundObjectsSystem.prototype.step = function(dt) {
     if(obj.isPlanetObj) {
       obj.cloudAngle  += dt * obj.cloudDir * 0.32;
       obj.cloudColorT += dt * obj.cloudColorSpd;
+      // Orbit debris rocks
+      if(obj.debrisRocks) {
+        for(var _ri = 0; _ri < obj.debrisRocks.length; _ri++)
+          obj.debrisRocks[_ri].angle += dt * obj.debrisRocks[_ri].angSpeed;
+      }
     }
 
     // Current size
@@ -4894,6 +4900,56 @@ BackgroundObjectsSystem.prototype.step = function(dt) {
     } // end if(!isZoomPulse)
   }
 };
+
+// Create debris rocks array for a planet's orbital ring
+function _makeDebrisRocks() {
+  var colors = ['#c8a060','#a05830','#909098','#b83820','#d0b030','#607888','#c0b080','#806840','#a08878','#703030'];
+  var rocks = [];
+  var n = 16 + Math.floor(Math.random() * 8); // 16-23 rocks
+  for(var i = 0; i < n; i++) {
+    var rxF = 1.20 + Math.random() * 1.05; // orbit radius: 1.2-2.25× planet radius
+    rocks.push({
+      angle:    Math.random() * Math.PI * 2,
+      angSpeed: (0.16 + Math.random() * 0.28) * (Math.random() < 0.5 ? 1 : -1),
+      rxFrac:   rxF,
+      ryFrac:   rxF * (0.28 + Math.random() * 0.14), // elliptical tilt: 28-42% of rx
+      size:     1.2 + Math.random() * 3.8,
+      color:    colors[Math.floor(Math.random() * colors.length)],
+      alpha:    0.50 + Math.random() * 0.40
+    });
+  }
+  return rocks;
+}
+
+// Draw debris rocks orbiting around a planet (frontOnly=true → draw rocks in front of planet)
+function _drawDebrisRing(ctx, obj, currentW, frontOnly) {
+  if(!obj.debrisRocks) return;
+  var pcx = obj.x + currentW / 2;
+  var pcy = obj.y + (obj.baseHeight * obj.scale) / 2;
+  var pr  = currentW * 0.52;
+  var rocks = obj.debrisRocks;
+  for(var i = 0; i < rocks.length; i++) {
+    var r = rocks[i];
+    var sinA = Math.sin(r.angle);
+    var isFront = sinA >= 0;
+    if(frontOnly !== isFront) continue;
+    var bx = pcx + Math.cos(r.angle) * pr * r.rxFrac;
+    var by = pcy + sinA * pr * r.ryFrac;
+    var depthFade = isFront ? 1.0 : (0.30 + 0.55 * Math.abs(sinA));
+    var sz = r.size * (isFront ? 1.0 : 0.60);
+    // Soft outer halo
+    ctx.globalAlpha = r.alpha * depthFade * 0.28;
+    ctx.fillStyle = r.color;
+    ctx.beginPath();
+    ctx.arc(bx, by, sz * 2.8, 0, Math.PI * 2);
+    ctx.fill();
+    // Rock core
+    ctx.globalAlpha = r.alpha * depthFade;
+    ctx.beginPath();
+    ctx.arc(bx, by, sz, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
 
 // Amorphous smoke-cloud haze around a planet — overlapping soft radial gradients, no defined shape
 function _drawPlanetCloud(ctx, obj, currentW) {
@@ -4951,6 +5007,44 @@ function _drawPlanetCloud(ctx, obj, currentW) {
     ctx.arc(bx, by, br, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  // Outer dust cloud — extends beyond planet into the debris ring zone
+  var _dustPal = [
+    [190, 130,  40],  // orange dust
+    [150, 100,  50],  // rust/brown
+    [170, 150,  60],  // golden dust
+    [ 90,  90, 120],  // cold grey-blue
+    [160,  80,  30],  // deep rust
+    [120, 140,  80]   // murky green-gold
+  ];
+  var di = Math.floor((obj.cloudColorT * 0.55)) % _dustPal.length;
+  var dn = (di + 1) % _dustPal.length;
+  var df = (obj.cloudColorT * 0.55) - Math.floor(obj.cloudColorT * 0.55);
+  var dr = Math.round(_dustPal[di][0]*(1-df) + _dustPal[dn][0]*df);
+  var dg = Math.round(_dustPal[di][1]*(1-df) + _dustPal[dn][1]*df);
+  var db = Math.round(_dustPal[di][2]*(1-df) + _dustPal[dn][2]*df);
+
+  var _outerBlobs = [
+    [1.35, 0.30, 0.70], [1.55, 1.45, 0.75], [1.30, 2.55, 0.65],
+    [1.60, 3.75, 0.80], [1.45, 4.95, 0.68], [1.25, 5.80, 0.62],
+    [1.65, 0.95, 0.60], [1.42, 2.15, 0.66], [1.52, 3.30, 0.64],
+    [1.38, 4.55, 0.72], [1.70, 1.80, 0.58], [1.28, 5.20, 0.70]
+  ];
+  for(var j = 0; j < _outerBlobs.length; j++) {
+    var ob = _outerBlobs[j];
+    var oang = ob[1] + obj.cloudAngle * 0.55;
+    var obx  = pcx + Math.cos(oang) * ob[0] * pr;
+    var oby  = pcy + Math.sin(oang) * ob[0] * pr * 0.42; // elliptical tilt for 3D look
+    var obr  = ob[2] * pr;
+    var og = ctx.createRadialGradient(obx, oby, 0, obx, oby, obr);
+    og.addColorStop(0,   'rgba(' + dr + ',' + dg + ',' + db + ',0.11)');
+    og.addColorStop(0.5, 'rgba(' + dr + ',' + dg + ',' + db + ',0.05)');
+    og.addColorStop(1,   'rgba(' + dr + ',' + dg + ',' + db + ',0)');
+    ctx.fillStyle = og;
+    ctx.beginPath();
+    ctx.arc(obx, oby, obr, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 BackgroundObjectsSystem.prototype.draw = function(ctx) {
@@ -5005,10 +5099,16 @@ BackgroundObjectsSystem.prototype.draw = function(ctx) {
       ctx.translate(-rcx, -rcy);
     }
 
+    // Debris rocks BEHIND planet (sin < 0 → upper half of orbit = further away)
+    if(obj.isPlanetObj) _drawDebrisRing(ctx, obj, currentW, false);
+
     SpriteSheet.draw(ctx, obj.sprite, obj.x, obj.y, 0, currentW, currentH);
 
-    // Smoke cloud haze over the planet (drawn after so it tints the planet surface)
+    // Smoke cloud haze + outer dust ring
     if(obj.isPlanetObj) _drawPlanetCloud(ctx, obj, currentW);
+
+    // Debris rocks IN FRONT of planet (sin ≥ 0 → lower half of orbit = closer)
+    if(obj.isPlanetObj) _drawDebrisRing(ctx, obj, currentW, true);
 
     ctx.restore(); // restore after each object — transforms don't bleed into next
   }
