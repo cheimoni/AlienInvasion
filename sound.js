@@ -507,13 +507,20 @@ var SoundManager = new function() {
     this.getAnalyser = function() { return _analyser; };
 
     // ──── Alien Voice SFX ─────────────────────────────────────────────────
-    // Full pool — all short alien voices/sfx (sorted from scariest to least scary)
+    // Attack pool: short voices/screams/roars played on enemy dive attacks (<~20s)
     var _alienAttackPool = [
+        // === Dark demon voices (most terrifying) ===
         'music/alien voice/creature-demon-dark-voice-reverse-end-of-days-01-2025-08-27-05-53-11-utc/CREATURE_DEMON_Dark_Voice_Reverse_End_Of_Days_01.wav',
         'music/alien voice/creature-demon-dark-voice-reverse-fear-of-dark-01-2025-08-27-05-53-12-utc/CREATURE_DEMON_Dark_Voice_Reverse_Fear_Of_Dark_01.wav',
         'music/alien voice/dark-game-voice-spell-blookzoran-venomus-3-spoken-2025-08-27-06-49-12-utc/Dark_Game_Voice_Spell_Blookzoran_Venomus_3_Spoken_Reverb_Reverse_Male.wav',
         'music/alien voice/dark-game-voice-spell-agosa-landum-1-soft-full-rev-2025-08-27-06-07-11-utc/Dark_Game_Voice_Spell_Agosa_Landum_1_Soft_Full_Reverse_Conjure_Male.wav',
         'music/alien voice/dragon-of-sleep-2025-08-27-03-44-59-utc/Dragon of Sleep.wav',
+        // === Spirit howls, roars, wails, growls (~4-6s) ===
+        'music/alien voice/spirit-howl-2025-08-27-06-29-04-utc/HorrorAccents DE01_50_3.wav',
+        'music/alien voice/spirit-growl-2025-08-27-06-29-04-utc/HorrorAccents DE01_52_1.wav',
+        'music/alien voice/spirit-wail-2025-08-27-06-29-04-utc/HorrorAccents DE01_49_1.wav',
+        'music/alien voice/spirit-roar-2025-08-27-06-29-04-utc/HorrorAccents DE01_49_3.wav',
+        // === Alien creature sounds ===
         'music/alien voice/alien-creature-guttural-voice-2-2025-08-27-04-28-32-utc/Alien_Creature_Guttural_Voice_OCP-1574-73.wav',
         'music/alien voice/evil-alien-extraterrestrial-being-deep-voice-2025-08-27-06-59-52-utc/Evil Alien Talking02.wav',
         'music/alien voice/alien-voice-3-2025-08-27-04-14-14-utc/Alien Voice 3.wav',
@@ -521,8 +528,41 @@ var SoundManager = new function() {
         'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking01.wav',
         'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking02.wav',
         'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking03.wav',
-        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking04.wav'
+        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking04.wav',
+        // === Human screams + spirit sounds (~12-20s) ===
+        'music/alien voice/male-screams-int-parking-garage-2025-08-27-04-33-39-utc/Male_Screams_Int_Parking_Garage_ODY-1604-21.wav',
+        'music/alien voice/spirit-screams-hot-whispery-shouting-piercing-2025-08-27-04-49-36-utc/Spirit_Screams_Hot_Whispery_Shouting_Piercing_ODY-1711-17.wav',
+        'music/alien voice/spirit-death-2025-08-27-06-28-35-utc/Spirit Death.wav',
+        'music/alien voice/spirit-materialization-2025-08-27-06-20-24-utc/DarkPads DE01_63_2.wav',
+        'music/alien voice/emerging-spirit-2025-08-27-06-29-04-utc/DarkPads DE01_73_3.wav',
+        'music/alien voice/spirit-moans-1-2025-08-27-04-41-38-utc/SpiritMoans_FDU4s_01.wav'
     ];
+
+    // Boss ambience pool: longer atmospheric sounds (25-55s) — play when mothership arrives
+    var _bossAmbiencePool = [
+        'music/alien voice/dark-atmosphere-ambience-2025-08-27-02-11-26-utc/Dark Atmosphere Ambience.wav',
+        'music/alien voice/spirit-moans-male-voice-2-2025-08-27-04-49-13-utc/Spirit_Moans_Male_Voice_ODY-1309-061.wav',
+        'music/alien voice/teenagers-party-walla-wild-female-scream-2025-08-27-05-27-24-utc/Teenagers_Party_Walla_Wild_Female_Scream_OCP-1218-050.wav',
+        'music/alien voice/atmosphere-drone-horror-4-2025-08-27-04-14-16-utc/Atmosphere Drone Horror 4.wav',
+        'music/alien voice/dangerous-sinister-ambience-2025-08-27-06-23-28-utc/AmbDangerSomething MM012001.wav',
+        'music/alien voice/spirit-moans-female-voice-2025-08-27-04-49-17-utc/Spirit_Moans_Female_Voice_ODY-1309-062.wav'
+    ];
+    var _bossAmbienceBag = [];
+
+    // Wheel ambience pool: long atmospheric sounds (>55s) — play during Wheel of Fortune stage
+    var _wheelAmbiencePool = [
+        'music/alien voice/horror-game-ambience-loop-creepy-terror-drone-hum-2025-08-27-05-39-01-utc/Horror_Game_Ambience_Loop_Creepy_Terror_Drone_Hum_Airy_Wind.wav',
+        'music/alien voice/creepy-fear-ambience-2025-08-27-05-32-15-utc/02950 creepy atmo.wav',
+        'music/alien voice/terror-ambience-2025-08-27-06-48-46-utc/Terror Ambience.wav',
+        'music/alien voice/drone-futuristic-horror-background-transition-5-2025-08-27-04-14-28-utc/Drone Futuristic Horror Background Transition 5.wav',
+        'music/alien voice/spirit-moans-2025-08-27-04-52-29-utc/Spirit_Moans_ODY-1449-071.wav',
+        'music/alien voice/horror-ambience-2025-08-27-06-28-33-utc/Horror Ambience.wav',
+        'music/alien voice/from-darkness-2025-08-27-03-13-30-utc/From Darkness.wav',
+        'music/alien voice/horror-background-ambience-2025-08-27-06-28-25-utc/Horror Background Sounds 1.wav',
+        'music/alien voice/scary-ambience-2025-12-18-21-09-11-utc/Scary Ambience.wav',
+        'music/alien voice/dark-scary-ambience-2025-08-27-06-43-28-utc/Mountain Audio - Dark & Scary Ambience/Mountain Audio - Dark & Scary Ambience.wav'
+    ];
+    var _wheelAmbienceAudio = null; // reference so we can stop it
 
     var _alienLastPlayed = 0;  // throttle timestamp
     var _alienBag = [];         // shuffle-bag: cycle all voices before repeating
@@ -555,6 +595,52 @@ var SoundManager = new function() {
         if(muted || sfxMuted) return;
         var a = new Audio(_pickAlien());
         a.volume = 1.0;
+        a.play().catch(function() {});
+    };
+
+    // Play long atmospheric sound during Wheel of Fortune stage
+    this.playWheelAmbience = function() {
+        if(muted || sfxMuted) return;
+        // Stop any previous wheel ambience
+        if(_wheelAmbienceAudio) {
+            try { _wheelAmbienceAudio.pause(); } catch(e) {}
+            _wheelAmbienceAudio = null;
+        }
+        var idx = Math.floor(Math.random() * _wheelAmbiencePool.length);
+        _wheelAmbienceAudio = new Audio(_wheelAmbiencePool[idx]);
+        _wheelAmbienceAudio.volume = 0.60;
+        _wheelAmbienceAudio.play().catch(function() {});
+    };
+
+    // Stop wheel ambience (called when wheel stage ends)
+    this.stopWheelAmbience = function() {
+        if(_wheelAmbienceAudio) {
+            var _wa = _wheelAmbienceAudio;
+            _wheelAmbienceAudio = null;
+            // Fade out over 1.5s
+            var _wVol = _wa.volume;
+            var _wSteps = 20;
+            var _wStep = 0;
+            var _wTimer = setInterval(function() {
+                _wStep++;
+                _wa.volume = Math.max(0, _wVol * (1 - _wStep / _wSteps));
+                if(_wStep >= _wSteps) { clearInterval(_wTimer); try { _wa.pause(); } catch(e) {} }
+            }, 75);
+        }
+    };
+
+    // Play atmospheric horror ambience when a mothership/boss arrives (shuffle-bag rotation)
+    this.playBossAmbience = function() {
+        if(muted || sfxMuted) return;
+        if(_bossAmbienceBag.length === 0) {
+            _bossAmbienceBag = _bossAmbiencePool.slice();
+            for(var _bi = _bossAmbienceBag.length - 1; _bi > 0; _bi--) {
+                var _bj = Math.floor(Math.random() * (_bi + 1));
+                var _bt = _bossAmbienceBag[_bi]; _bossAmbienceBag[_bi] = _bossAmbienceBag[_bj]; _bossAmbienceBag[_bj] = _bt;
+            }
+        }
+        var a = new Audio(_bossAmbienceBag.pop());
+        a.volume = 0.75;
         a.play().catch(function() {});
     };
 };

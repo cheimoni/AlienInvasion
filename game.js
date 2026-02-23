@@ -5779,6 +5779,7 @@ Enemy.prototype.step = function(dt) {
         this.motherArrived = true;
         this.motherDir = 1; // Start moving right
         SoundManager.playWarp();
+        SoundManager.playBossAmbience(); // eerie atmospheric sound on mothership arrival
         // arrival — no shake (shake only on player hit or mothership kill)
       }
     } else {

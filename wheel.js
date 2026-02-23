@@ -96,6 +96,9 @@ var WheelBonusScreen = function(completedLevel, onComplete) {
   var bonusPoints  = 0;
   var resultTimer  = 0;
   var fireHeld     = true;   // prevent fire from triggering on screen entry
+
+  // Start the eerie long ambient sound for the wheel stage
+  SoundManager.playWheelAmbience();
   var tickerDeflect = 0;     // rubber flapper deflection (radians)
   var lastSegIdx   = -1;     // last segment boundary crossed (for click sound)
   var glowPhase    = 0;      // pulsing glow on result
@@ -154,6 +157,7 @@ var WheelBonusScreen = function(completedLevel, onComplete) {
       glowPhase   += dt * 4;
       // After 2s, allow continuing
       if(resultTimer > 2.0 && Game.keys['fire'] && !fireHeld) {
+        SoundManager.stopWheelAmbience();
         if(onComplete) onComplete();
       }
     }
