@@ -2774,47 +2774,6 @@ var saveHighScore = function(score) {
   return false;
 };
 
-// ===== MUSIC WAVEFORM VISUALIZER =====
-var MusicWaveVisualizer = function() {
-  var _analyser = null;
-  var _buf = null;
-
-  this.step = function(dt) {
-    var a = SoundManager.getAnalyser ? SoundManager.getAnalyser() : null;
-    if(a !== _analyser) {
-      _analyser = a;
-      _buf = _analyser ? new Uint8Array(_analyser.frequencyBinCount) : null;
-    }
-  };
-
-  this.draw = function(ctx) {
-    if(!_analyser || !_buf || !SoundManager.isMusicPlaying()) return;
-    _analyser.getByteFrequencyData(_buf);
-
-    var W = Game.width;
-    var H = Game.height;
-    var barH = Game.mobile ? 22 : 38;
-    var barY = H - barH;
-    var n = _buf.length;
-    var barW = W / n;
-
-    ctx.save();
-    // Glow pass
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = 'rgba(0,200,255,0.9)';
-    ctx.globalAlpha = 0.55;
-    for(var i = 0; i < n; i++) {
-      var v = _buf[i] / 255;
-      var h = Math.round(v * barH);
-      if(h < 1) continue;
-      var r = Math.round(v * 60);
-      var g = Math.round(170 + v * 85);
-      ctx.fillStyle = 'rgb(' + r + ',' + g + ',255)';
-      ctx.fillRect(Math.round(i * barW), barY + barH - h, Math.max(1, Math.ceil(barW) - 1), h);
-    }
-    ctx.restore();
-  };
-};
 
 // ===== SHIP SELECTION SYSTEM =====
 var _SELECTABLE_SHIPS = [
@@ -3048,7 +3007,6 @@ var startGame = function() {
   Game.setBoard(0,new Starfield(20,0.5,350,true));
   Game.setBoard(1,new Starfield(50,0.7,280));
   Game.setBoard(2,new BackgroundObjectsSystem()); // Planets, asteroids, rocks + shooting stars/comets
-  Game.setBoard(3,new MusicWaveVisualizer()); // Waveform visualizer (music-reactive bars)
   if(!Game.mobile) {
     Game.setBoard(2.5,new EnergyParticlesSystem()); // Desktop only (performance)
   }
