@@ -505,13 +505,13 @@ var SoundManager = new function() {
         'music/alien voice/dark-game-voice-spell-agosa-landum-1-soft-full-rev-2025-08-27-06-07-11-utc/Dark_Game_Voice_Spell_Agosa_Landum_1_Soft_Full_Reverse_Conjure_Male.wav',
         'music/alien voice/dragon-of-sleep-2025-08-27-03-44-59-utc/Dragon of Sleep.wav',
         'music/alien voice/alien-creature-guttural-voice-2-2025-08-27-04-28-32-utc/Alien_Creature_Guttural_Voice_OCP-1574-73.wav',
-        'music/alien voice/evil-alien-extraterrestrial-being-deep-voice-2025-08-27-06-59-52-utc/Evil Alien Talking02.mp3',
+        'music/alien voice/evil-alien-extraterrestrial-being-deep-voice-2025-08-27-06-59-52-utc/Evil Alien Talking02.wav',
         'music/alien voice/alien-voice-3-2025-08-27-04-14-14-utc/Alien Voice 3.wav',
         'music/alien voice/alien-voice-or-code-2025-08-27-06-41-38-utc/Communications 8005_85_2.wav',
-        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking01.mp3',
-        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking02.mp3',
-        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking03.mp3',
-        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking04.mp3'
+        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking01.wav',
+        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking02.wav',
+        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking03.wav',
+        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking04.wav'
     ];
 
     var _alienLastPlayed = 0;  // throttle timestamp
