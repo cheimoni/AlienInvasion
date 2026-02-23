@@ -4189,7 +4189,8 @@ var Starfield = function(speed,opacity,numStars,clear) {
 // SHOOTING STARS SYSTEM — periodic showers, dusty hazy trail
 // ===================================================================
 var ShootingStarSystem = function() {
-  this.stars = [];
+  this.stars  = [];
+  this.flares = []; // ignition bursts when a meteor burns up
   // First shower quickly, then periodic 30-150s gaps (max ~3-4 min total)
   this.showerTimer  = 8 + Math.random() * 12;
   this.showerActive = false;
@@ -4248,8 +4249,39 @@ ShootingStarSystem.prototype.step = function(dt) {
   for(var i = this.stars.length-1; i >= 0; i--) {
     var s = this.stars[i];
     s.x += s.vx*dt; s.y += s.vy*dt; s.life -= dt;
-    if(s.life <= 0 || s.x > Game.width+400 || s.y > Game.height+400 || s.x < -400 || s.y < -400)
+    var offScreen = (s.x > Game.width+400 || s.y > Game.height+400 || s.x < -400 || s.y < -400);
+    if(s.life <= 0 || offScreen) {
+      // Ignition burst — only if star is still visible on screen (not off-screen)
+      if(!offScreen && s.isLarge && Math.random() < 0.75) {
+        for(var p = 0; p < 14; p++) {
+          var pang = Math.random() * Math.PI * 2;
+          var pspd = 40 + Math.random() * 100;
+          this.flares.push({ x: s.x, y: s.y,
+            vx: Math.cos(pang) * pspd, vy: Math.sin(pang) * pspd,
+            life: 0.5 + Math.random() * 0.5, maxLife: 1.0,
+            size: s.size * (0.4 + Math.random() * 0.8) });
+        }
+      } else if(!offScreen && Math.random() < 0.35) {
+        // Small stars: occasional tiny spark
+        for(var p = 0; p < 6; p++) {
+          var pang = Math.random() * Math.PI * 2;
+          this.flares.push({ x: s.x, y: s.y,
+            vx: Math.cos(pang) * (30 + Math.random() * 60),
+            vy: Math.sin(pang) * (30 + Math.random() * 60),
+            life: 0.3 + Math.random() * 0.3, maxLife: 0.6,
+            size: s.size * (0.3 + Math.random() * 0.5) });
+        }
+      }
       this.stars.splice(i, 1);
+    }
+  }
+  // Update flares
+  for(var j = this.flares.length-1; j >= 0; j--) {
+    var f = this.flares[j];
+    f.x += f.vx * dt; f.y += f.vy * dt;
+    f.vx *= (1 - dt * 2.5); f.vy *= (1 - dt * 2.5); // drag
+    f.life -= dt;
+    if(f.life <= 0) this.flares.splice(j, 1);
   }
 };
 
@@ -4307,6 +4339,23 @@ ShootingStarSystem.prototype.draw = function(ctx) {
     hg.addColorStop(1,   'rgba(220, 80, 10,0)');
     ctx.beginPath(); ctx.arc(s.x, s.y, hr, 0, Math.PI*2);
     ctx.fillStyle = hg; ctx.fill();
+  }
+
+  // Draw ignition flares (fire burst particles)
+  for(var fi = 0; fi < this.flares.length; fi++) {
+    var f  = this.flares[fi];
+    var ft = f.life / f.maxLife; // 1=fresh, 0=dead
+    // Color shifts: white-yellow → orange → red as it fades
+    var fcr = 255, fcg = Math.round(220 * ft), fcb = Math.round(60 * ft * ft);
+    var fa  = ft * 0.85;
+    var fr  = f.size * (0.5 + ft * 1.5);
+    // Glow halo
+    ctx.globalAlpha = fa * 0.30;
+    ctx.fillStyle = 'rgb(' + fcr + ',' + fcg + ',' + fcb + ')';
+    ctx.beginPath(); ctx.arc(f.x, f.y, fr * 3.5, 0, Math.PI * 2); ctx.fill();
+    // Core spark
+    ctx.globalAlpha = fa;
+    ctx.beginPath(); ctx.arc(f.x, f.y, fr, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
 };
@@ -4688,7 +4737,6 @@ var BackgroundObjectsSystem = function() {
         cloudDir:      isPlanet ? (Math.random() < 0.5 ? 1 : -1) : 0,
         cloudColorT:   isPlanet ? (Math.random() * 6) : 0,
         cloudColorSpd: isPlanet ? (0.12 + Math.random() * 0.20) : 0,
-        debrisRocks:   isPlanet ? _makeDebrisRocks() : null,
         // Era-change departure system
         typePool:      group.types,   // so reset can pick a fresh sprite
         normalSpeed:   objBaseSpeed,  // remember baseline for reset
@@ -4821,11 +4869,6 @@ BackgroundObjectsSystem.prototype.step = function(dt) {
     if(obj.isPlanetObj) {
       obj.cloudAngle  += dt * obj.cloudDir * 0.32;
       obj.cloudColorT += dt * obj.cloudColorSpd;
-      // Orbit debris rocks
-      if(obj.debrisRocks) {
-        for(var _ri = 0; _ri < obj.debrisRocks.length; _ri++)
-          obj.debrisRocks[_ri].angle += dt * obj.debrisRocks[_ri].angSpeed;
-      }
     }
 
     // Current size
@@ -5079,16 +5122,10 @@ BackgroundObjectsSystem.prototype.draw = function(ctx) {
       ctx.translate(-rcx, -rcy);
     }
 
-    // Debris rocks BEHIND planet (sin < 0 → upper half of orbit = further away)
-    if(obj.isPlanetObj) _drawDebrisRing(ctx, obj, currentW, false);
-
     SpriteSheet.draw(ctx, obj.sprite, obj.x, obj.y, 0, currentW, currentH);
 
     // Smoke cloud haze + outer dust ring
     if(obj.isPlanetObj) _drawPlanetCloud(ctx, obj, currentW);
-
-    // Debris rocks IN FRONT of planet (sin ≥ 0 → lower half of orbit = closer)
-    if(obj.isPlanetObj) _drawDebrisRing(ctx, obj, currentW, true);
 
     ctx.restore(); // restore after each object — transforms don't bleed into next
   }
