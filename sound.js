@@ -307,6 +307,22 @@ var SoundManager = new function() {
         playTone(800, 0.1, 'sine', 0.2, 0.1);
     };
 
+    // Wheel of Fortune ticker click
+    this.playTick = function() {
+        if(!audioContext || muted || sfxMuted) return;
+        var osc  = audioContext.createOscillator();
+        var gain = audioContext.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(900, audioContext.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(300, audioContext.currentTime + 0.04);
+        gain.gain.setValueAtTime(0.18 * masterVolume * sfxVolume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start(audioContext.currentTime);
+        osc.stop(audioContext.currentTime + 0.06);
+    };
+
     // Kamikaze attack - rising alarm then dive sound
     this.playKamikaze = function() {
         if(!audioContext || muted || sfxMuted) return;

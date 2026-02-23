@@ -3122,11 +3122,19 @@ var playGame = function() {
       if((currentLevel - 1) % 5 === 0) {
         playerLives = Math.min(playerLives + 1, 9);
       }
-      // Every 5 levels → Bonus Stage
-      if((currentLevel - 1) % 5 === 0) {
-        Game.setBoard(9, new LevelTransitionScreen(currentLevel - 1, currentLevel, startBonusStage));
+      var completedLvl = currentLevel - 1;
+      var doTransition = function() {
+        if(completedLvl % 5 === 0) {
+          Game.setBoard(9, new LevelTransitionScreen(completedLvl, currentLevel, startBonusStage));
+        } else {
+          Game.setBoard(9, new LevelTransitionScreen(completedLvl, currentLevel, playGame));
+        }
+      };
+      // Every 8 completed levels → Wheel of Fortune bonus stage
+      if(completedLvl % 8 === 0) {
+        Game.setBoard(9, new WheelBonusScreen(completedLvl, doTransition));
       } else {
-        Game.setBoard(9, new LevelTransitionScreen(currentLevel - 1, currentLevel, playGame));
+        doTransition();
       }
     } else {
       // Won the game!
