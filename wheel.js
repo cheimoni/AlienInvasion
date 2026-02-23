@@ -24,7 +24,15 @@ var WheelBonusScreen = function(completedLevel, onComplete) {
     'Remove_background_completely_make_100_transparen-1771833999303.webp',
     'Remove_background_completely_make_100_transparen-1771834006328.webp',
     'Remove_background_completely_make_100_transparen-1771834012710.webp',
-    'Remove_background_completely_make_100_transparen-1771834027303.webp'
+    'Remove_background_completely_make_100_transparen-1771834027303.webp',
+    'Remove_background_completely_make_100_transparen-1771849113082.webp',
+    'Remove_background_completely_make_100_transparen-1771849352158.webp',
+    'Remove_background_completely_make_100_transparen-1771849368261.webp',
+    'Remove_background_completely_make_100_transparen-1771849369187.webp',
+    'Remove_background_completely_make_100_transparen-1771849373487.webp',
+    'Remove_background_completely_make_100_transparen-1771849386000.webp',
+    'Remove_background_completely_make_100_transparen-1771849394291.webp',
+    'Remove_background_completely_make_100_transparen-1771849543301.webp'
   ];
 
   var FIGURE_FILES = [
