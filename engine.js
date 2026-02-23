@@ -751,8 +751,8 @@ var TitleScreen = function TitleScreen(title,subtitle,callback) {
   };
 
   this.draw = function(ctx) {
-    // Dark vignette overlay
-    ctx.fillStyle = 'rgba(0,0,18,0.72)';
+    // Light vignette — let starfield show through
+    ctx.fillStyle = 'rgba(0,0,18,0.40)';
     ctx.fillRect(0, 0, Game.width, Game.height);
 
     // Animated energy particles

@@ -165,8 +165,8 @@ var WheelBonusScreen = function(completedLevel, onComplete) {
     var cx = W * 0.5, cy = H * 0.50;
     var r  = Math.min(W * 0.38, H * 0.37);
 
-    // ── Dark overlay background
-    ctx.fillStyle = 'rgba(0,0,10,0.93)';
+    // ── Semi-transparent overlay — stars from boards 0/1 show through
+    ctx.fillStyle = 'rgba(0,0,10,0.48)';
     ctx.fillRect(0, 0, W, H);
 
     // ── Stars

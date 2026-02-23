@@ -497,47 +497,54 @@ var SoundManager = new function() {
     this.getAnalyser = function() { return _analyser; };
 
     // ──── Alien Voice SFX ─────────────────────────────────────────────────
+    // Full pool — all short alien voices/sfx (sorted from scariest to least scary)
     var _alienAttackPool = [
+        'music/alien voice/creature-demon-dark-voice-reverse-end-of-days-01-2025-08-27-05-53-11-utc/CREATURE_DEMON_Dark_Voice_Reverse_End_Of_Days_01.wav',
+        'music/alien voice/creature-demon-dark-voice-reverse-fear-of-dark-01-2025-08-27-05-53-12-utc/CREATURE_DEMON_Dark_Voice_Reverse_Fear_Of_Dark_01.wav',
+        'music/alien voice/dark-game-voice-spell-blookzoran-venomus-3-spoken-2025-08-27-06-49-12-utc/Dark_Game_Voice_Spell_Blookzoran_Venomus_3_Spoken_Reverb_Reverse_Male.wav',
+        'music/alien voice/dark-game-voice-spell-agosa-landum-1-soft-full-rev-2025-08-27-06-07-11-utc/Dark_Game_Voice_Spell_Agosa_Landum_1_Soft_Full_Reverse_Conjure_Male.wav',
+        'music/alien voice/dragon-of-sleep-2025-08-27-03-44-59-utc/Dragon of Sleep.wav',
+        'music/alien voice/alien-creature-guttural-voice-2-2025-08-27-04-28-32-utc/Alien_Creature_Guttural_Voice_OCP-1574-73.wav',
+        'music/alien voice/evil-alien-extraterrestrial-being-deep-voice-2025-08-27-06-59-52-utc/Evil Alien Talking02.mp3',
+        'music/alien voice/alien-voice-3-2025-08-27-04-14-14-utc/Alien Voice 3.wav',
+        'music/alien voice/alien-voice-or-code-2025-08-27-06-41-38-utc/Communications 8005_85_2.wav',
         'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking01.mp3',
         'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking02.mp3',
         'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking03.mp3',
-        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking04.mp3',
-        'music/alien voice/evil-alien-extraterrestrial-being-deep-voice-2025-08-27-06-59-52-utc/Evil Alien Talking02.mp3',
-        'music/alien voice/alien-creature-guttural-voice-2-2025-08-27-04-28-32-utc/Alien_Creature_Guttural_Voice_OCP-1574-73.wav',
-        'music/alien voice/alien-voice-3-2025-08-27-04-14-14-utc/Alien Voice 3.wav',
-        'music/alien voice/alien-voice-or-code-2025-08-27-06-41-38-utc/Communications 8005_85_2.wav',
-        'music/alien voice/dark-game-voice-spell-agosa-landum-1-soft-full-rev-2025-08-27-06-07-11-utc/Dark_Game_Voice_Spell_Agosa_Landum_1_Soft_Full_Reverse_Conjure_Male.wav',
-        'music/alien voice/dark-game-voice-spell-blookzoran-venomus-3-spoken-2025-08-27-06-49-12-utc/Dark_Game_Voice_Spell_Blookzoran_Venomus_3_Spoken_Reverb_Reverse_Male.wav',
-        'music/alien voice/creature-demon-dark-voice-reverse-end-of-days-01-2025-08-27-05-53-11-utc/CREATURE_DEMON_Dark_Voice_Reverse_End_Of_Days_01.wav',
-        'music/alien voice/creature-demon-dark-voice-reverse-fear-of-dark-01-2025-08-27-05-53-12-utc/CREATURE_DEMON_Dark_Voice_Reverse_Fear_Of_Dark_01.wav'
+        'music/alien voice/alien-talk-2025-08-27-06-38-22-utc/Alien Talking04.mp3'
     ];
-    var _alienLastPlayed = 0; // ms timestamp — throttle so voices don't stack
-    var _alienLastIdx = -1;   // prevent consecutive repeat
+
+    var _alienLastPlayed = 0;  // throttle timestamp
+    var _alienBag = [];         // shuffle-bag: cycle all voices before repeating
 
     function _pickAlien() {
-        var n = _alienAttackPool.length;
-        var idx;
-        do { idx = Math.floor(Math.random() * n); } while(idx === _alienLastIdx && n > 1);
-        _alienLastIdx = idx;
-        return _alienAttackPool[idx];
+        if(_alienBag.length === 0) {
+            // Refill and Fisher-Yates shuffle
+            _alienBag = _alienAttackPool.slice();
+            for(var _i = _alienBag.length - 1; _i > 0; _i--) {
+                var _j = Math.floor(Math.random() * (_i + 1));
+                var _t = _alienBag[_i]; _alienBag[_i] = _alienBag[_j]; _alienBag[_j] = _t;
+            }
+        }
+        return _alienBag.pop();
     }
 
-    // Play a random alien voice on dive/kamikaze attack (throttled to 1 per 2s)
+    // Play a random alien voice on dive/kamikaze attack — loud and scary
     this.playAlienAttack = function() {
         if(muted || sfxMuted) return;
         var now = Date.now();
-        if(now - _alienLastPlayed < 2000) return;
+        if(now - _alienLastPlayed < 1200) return; // 1.2s throttle
         _alienLastPlayed = now;
         var a = new Audio(_pickAlien());
-        a.volume = Math.min(1, masterVolume * sfxVolume * 0.75);
+        a.volume = 1.0; // max volume — scariest possible
         a.play().catch(function() {});
     };
 
-    // Play a random alien voice when ship selection screen opens
+    // Play alien voice on ship select or boss events — full blast
     this.playAlienSelect = function() {
         if(muted || sfxMuted) return;
         var a = new Audio(_pickAlien());
-        a.volume = Math.min(1, masterVolume * sfxVolume * 0.65);
+        a.volume = 1.0;
         a.play().catch(function() {});
     };
 };

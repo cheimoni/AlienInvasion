@@ -1493,7 +1493,6 @@ GridEnemy.prototype.hit = function(damage) {
   if(this.health <= 0) {
     if(this.board.remove(this)) {
       this.dead = true;
-      Game.shake(5, 0.14);
       SoundManager.playEnemyDeath();
       var ecx = this.x + this.w/2, ecy = this.y + this.h/2;
       this.board.add(new Explosion(ecx, ecy));
@@ -1661,7 +1660,6 @@ ZigZagEnemy.prototype.hit = function(damage) {
   this.health -= damage;
   if(this.health <= 0) {
     if(this.board.remove(this)) {
-      Game.shake(5, 0.15);
       SoundManager.playEnemyDeath();
       var ecx = this.x + this.w/2, ecy = this.y + this.h/2;
       this.board.add(new Explosion(ecx, ecy));
@@ -1736,7 +1734,6 @@ SpiralEnemy.prototype.hit = function(damage) {
   this.health -= damage;
   if(this.health <= 0) {
     if(this.board.remove(this)) {
-      Game.shake(6, 0.18);
       SoundManager.playExplosion();
       var ecx = this.x + this.w/2, ecy = this.y + this.h/2;
       this.board.add(new Explosion(ecx, ecy));
@@ -1755,7 +1752,6 @@ DivingEnemy.prototype.hit = function(damage) {
   this.health -= damage;
   if(this.health <= 0) {
     if(this.board.remove(this)) {
-      Game.shake(7, 0.2);
       SoundManager.playExplosion();
       var ecx = this.x + this.w/2, ecy = this.y + this.h/2;
       this.board.add(new Explosion(ecx, ecy));
@@ -1900,7 +1896,6 @@ KamikazeEnemy.prototype.hit = function(damage) {
   this.health -= damage;
   if(this.health <= 0) {
     if(this.board.remove(this)) {
-      Game.shake(8, 0.25);
       SoundManager.playExplosion();
       var ecx = this.x + this.w/2, ecy = this.y + this.h/2;
       this.board.add(new Explosion(ecx, ecy));
@@ -2895,10 +2890,8 @@ var ShipSelectScreen = function(callback) {
   this.draw = function(ctx) {
     // Dark overlay
     ctx.save();
-    ctx.globalAlpha = 0.80;
-    ctx.fillStyle = '#000010';
+    ctx.fillStyle = 'rgba(0,0,16,0.72)';
     ctx.fillRect(0, 0, _W, _H);
-    ctx.globalAlpha = 1;
 
     // Panel background
     var _bRadius = Math.max(8, Math.floor(_icoSz * 0.12));
@@ -3951,8 +3944,8 @@ var LevelTransitionScreen = function(fromLevel, toLevel, callback) {
     var w = Game.width, h = Game.height;
     var pulse = 0.75 + 0.25 * Math.sin(t * 2.2);
 
-    // Dark space background
-    ctx.fillStyle = 'rgba(0,0,12,0.88)';
+    // Semi-transparent overlay — stars show through from boards 0/1
+    ctx.fillStyle = 'rgba(0,0,12,0.38)';
     ctx.fillRect(0, 0, w, h);
 
     // Decorative frame — bleed beyond canvas edges top & bottom so it fills fully
@@ -5418,7 +5411,6 @@ GiantLaser.prototype.step = function(dt) {
         }
       }
     }
-    Game.shake(10, 0.35);
     SoundManager.playRocket();
   }
   if(this.alpha <= 0) this.board.remove(this);
@@ -5786,7 +5778,7 @@ Enemy.prototype.step = function(dt) {
         this.motherArrived = true;
         this.motherDir = 1; // Start moving right
         SoundManager.playWarp();
-        Game.shake(this.isBossShip ? 24 : 14, this.isBossShip ? 0.75 : 0.5);
+        // arrival — no shake (shake only on player hit or mothership kill)
       }
     } else {
       // Phase 2: move left-right at fixed height (no descent)
@@ -5918,7 +5910,6 @@ Enemy.prototype.hit = function(damage) {
         this.board.add(new PowerUp(cx, cy));
       } else {
         SoundManager.playEnemyDeath();
-        Game.shake(6, 0.18);
         var ecx = this.x + this.w/2, ecy = this.y + this.h/2;
         this.board.add(new Explosion(ecx, ecy));
         this.board.add(new ParticleExplosion(ecx, ecy, this.w, this.sprite));
@@ -6650,7 +6641,6 @@ PlayerRocket.prototype.step = function(dt) {
       var sspd = 260 + Math.random() * 180;
       this.board.add(new Shrapnel(ex, ey, Math.cos(sang)*sspd, Math.sin(sang)*sspd));
     }
-    Game.shake(22, 0.55);
     SoundManager.playRocketExplosion();
     this.board.remove(this);
   }
