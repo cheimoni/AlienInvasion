@@ -955,14 +955,14 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
 
     // ---- Row of 7 enemies — dome shape: center tallest, tapers to sides ----
     if(_tsRowEnemies.length > 0 && typeof SpriteSheet !== 'undefined' && SpriteSheet && SpriteSheet.map) {
-      var _rBase = Math.round(Math.min(Game.height * 0.157, Game.width / 4.4, 117));
+      var _rBase = Math.round(Math.min(Game.height * 0.20, Game.width / 4.0, 140));
       // Scale multipliers per position (index 0..6, center=3): dome shape
       var _rScales = [0.55, 0.70, 0.88, 1.60, 0.88, 0.70, 0.55];
       var _rSizes = [];
       for(var _rs = 0; _rs < _tsRowEnemies.length; _rs++) {
         _rSizes.push(Math.round(_rBase * (_rScales[_rs] || 1.0)));
       }
-      var _rGap = Math.round(_rBase * 0.28);
+      var _rGap = Math.round(_rBase * 0.14);
       var _rTotalW = _rGap * (_tsRowEnemies.length - 1);
       for(var _rs2 = 0; _rs2 < _rSizes.length; _rs2++) _rTotalW += _rSizes[_rs2];
       var _rStartX = (Game.width - _rTotalW) / 2;
