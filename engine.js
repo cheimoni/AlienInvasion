@@ -956,29 +956,33 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
     // ---- Row of 7 enemies — dome shape: center tallest, tapers to sides ----
     if(_tsRowEnemies.length > 0 && typeof SpriteSheet !== 'undefined' && SpriteSheet && SpriteSheet.map) {
       var _rBase = Math.round(Math.min(Game.height * 0.20, Game.width / 4.0, 140));
-      // Scale multipliers per position (index 0..6, center=3): dome shape
+      // Heights per position (index 0..6, center=3): dome shape
       var _rScales = [0.55, 0.70, 0.88, 2.10, 0.88, 0.70, 0.55];
-      var _rSizes = [];
+      // Pre-calculate draw dimensions respecting each sprite's natural aspect ratio
+      var _rHs = [], _rWs = [];
       for(var _rs = 0; _rs < _tsRowEnemies.length; _rs++) {
-        _rSizes.push(Math.round(_rBase * (_rScales[_rs] || 1.0)));
+        var _sm = SpriteSheet.map[_tsRowEnemies[_rs]];
+        var _rh = Math.round(_rBase * (_rScales[_rs] || 1.0));
+        var _rw = _sm ? Math.round(_rh * (_sm.w / _sm.h)) : _rh;
+        _rHs.push(_rh); _rWs.push(_rw);
       }
       var _rGap = Math.round(_rBase * 0.14);
       var _rTotalW = _rGap * (_tsRowEnemies.length - 1);
-      for(var _rs2 = 0; _rs2 < _rSizes.length; _rs2++) _rTotalW += _rSizes[_rs2];
+      for(var _rs2 = 0; _rs2 < _rWs.length; _rs2++) _rTotalW += _rWs[_rs2];
       var _rStartX = (Game.width - _rTotalW) / 2;
       // Bottom-aligned: all sprites share same bottom line — dome rises upward
       var _rBottomY = _lastSubY + subSize + (showProgressBar ? 80 : 55) + Math.round(_rBase * 2.10);
       var _rCurX = _rStartX;
       for(var _rei = 0; _rei < _tsRowEnemies.length; _rei++) {
         var _re = _tsRowEnemies[_rei];
-        var _rsz = _rSizes[_rei];
-        if(!SpriteSheet.map[_re]) { _rCurX += _rsz + _rGap; continue; }
+        var _rdh = _rHs[_rei], _rdw = _rWs[_rei];
+        if(!SpriteSheet.map[_re]) { _rCurX += _rdw + _rGap; continue; }
         ctx.save();
         ctx.globalAlpha = 1.0;
         ctx.shadowBlur = 0;
-        SpriteSheet.draw(ctx, _re, _rCurX, _rBottomY - _rsz, 0, _rsz, _rsz);
+        SpriteSheet.draw(ctx, _re, _rCurX, _rBottomY - _rdh, 0, _rdw, _rdh);
         ctx.restore();
-        _rCurX += _rsz + _rGap;
+        _rCurX += _rdw + _rGap;
       }
     }
 
