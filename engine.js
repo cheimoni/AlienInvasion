@@ -833,7 +833,7 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
     var _tsSzMult = (opts.titleSizeScale !== undefined) ? opts.titleSizeScale : 1.0;
     var titleSize = Math.round(Math.min(58, Math.max(24, Math.floor(Game.width / 13))) * _tsSzMult);
     // Centred vertically — between the figures' shoulder and knee zone
-    var titleY = (opts.titleY !== undefined) ? opts.titleY : Game.height * 0.65;
+    var titleY = (opts.titleY !== undefined) ? opts.titleY : Game.height * 0.75;
     var pulse = 0.72 + 0.28 * Math.sin(t * 2.3);
     // Scale pulse — amplitude can be overridden per screen
     var _tsAmp = (opts.titleScaleAmplitude !== undefined) ? opts.titleScaleAmplitude : 0.10;
