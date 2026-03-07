@@ -8592,7 +8592,7 @@ var LevelTransitionScreen = function(fromLevel, toLevel, callback, previewPool) 
     var totalGroupH = titleSize + lineGap + subSize + lineGap + barH2 + 4;
     var groupTopY  = h * 0.75 - totalGroupH / 2;
     var titleY     = groupTopY + titleSize * 0.5;
-    var subY       = titleY + titleSize * 0.5 + lineGap + subSize * 0.5;
+    var subY       = titleY + titleSize * 0.5 + lineGap + subSize * 0.5 + 50;
     var barBottomY = subY + subSize * 0.5 + lineGap + barH2;
 
     // Title: "LEVEL X COMPLETE!"
