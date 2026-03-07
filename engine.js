@@ -957,7 +957,7 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
     if(_tsRowEnemies.length > 0 && typeof SpriteSheet !== 'undefined' && SpriteSheet && SpriteSheet.map) {
       var _rBase = Math.round(Math.min(Game.height * 0.20, Game.width / 4.0, 140));
       // Scale multipliers per position (index 0..6, center=3): dome shape
-      var _rScales = [0.55, 0.70, 0.88, 1.60, 0.88, 0.70, 0.55];
+      var _rScales = [0.55, 0.70, 0.88, 2.10, 0.88, 0.70, 0.55];
       var _rSizes = [];
       for(var _rs = 0; _rs < _tsRowEnemies.length; _rs++) {
         _rSizes.push(Math.round(_rBase * (_rScales[_rs] || 1.0)));
@@ -967,17 +967,15 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
       for(var _rs2 = 0; _rs2 < _rSizes.length; _rs2++) _rTotalW += _rSizes[_rs2];
       var _rStartX = (Game.width - _rTotalW) / 2;
       // Bottom-aligned: all sprites share same bottom line — dome rises upward
-      var _rBottomY = _lastSubY + subSize + (showProgressBar ? 80 : 55) + Math.round(_rBase * 1.60);
+      var _rBottomY = _lastSubY + subSize + (showProgressBar ? 80 : 55) + Math.round(_rBase * 2.10);
       var _rCurX = _rStartX;
       for(var _rei = 0; _rei < _tsRowEnemies.length; _rei++) {
         var _re = _tsRowEnemies[_rei];
         var _rsz = _rSizes[_rei];
         if(!SpriteSheet.map[_re]) { _rCurX += _rsz + _rGap; continue; }
-        var _rg = 0.70 + 0.25 * Math.sin(t * 1.6 + _rei * 0.9);
         ctx.save();
-        ctx.globalAlpha = _rg;
-        ctx.shadowColor = '#FFAACC';
-        ctx.shadowBlur = 14;
+        ctx.globalAlpha = 1.0;
+        ctx.shadowBlur = 0;
         SpriteSheet.draw(ctx, _re, _rCurX, _rBottomY - _rsz, 0, _rsz, _rsz);
         ctx.restore();
         _rCurX += _rsz + _rGap;
