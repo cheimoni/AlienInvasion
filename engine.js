@@ -957,7 +957,7 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
     if(_tsRowEnemies.length > 0 && typeof SpriteSheet !== 'undefined' && SpriteSheet && SpriteSheet.map) {
       var _rBase = Math.round(Math.min(Game.height * 0.157, Game.width / 4.4, 117));
       // Scale multipliers per position (index 0..6, center=3): dome shape
-      var _rScales = [1.0, 1.05, 1.10, 1.60, 1.10, 1.05, 1.0];
+      var _rScales = [0.55, 0.70, 0.88, 1.60, 0.88, 0.70, 0.55];
       var _rSizes = [];
       for(var _rs = 0; _rs < _tsRowEnemies.length; _rs++) {
         _rSizes.push(Math.round(_rBase * (_rScales[_rs] || 1.0)));
