@@ -26,6 +26,7 @@
 
 var Game = new function() {
   var boards = [];
+  var _boardKeys = []; // sorted numeric keys — supports fractional slots (1.5, 2.5, 9.5…)
 
   // Screen shake system
   this.shakeMagnitude = 0;
@@ -65,10 +66,6 @@ var Game = new function() {
 
     this.loop();
 
-    if(this.mobile) {
-      this.setBoard(10,new TouchControls());
-    }
-
     // Show loading screen while sprites load
     var _ls = new LoadingScreen();
     this.setBoard(9, _ls);
@@ -85,43 +82,38 @@ var Game = new function() {
     });
   };
 
-  // Fullscreen functionality
+  // Fullscreen functionality — canvas fills the entire viewport (no black bars).
+  // Game.uiScale is a reference multiplier so fonts/UI can scale consistently:
+  //   1.0 at 1280×720  |  1.5 at 1920×1080  |  2.0 at 2560×1440  |  3.0 at 4K
   this.makeFullscreen = function() {
     var hasTouch = !!('ontouchstart' in window);
-    if(hasTouch) return; // Skip on mobile
+    if(hasTouch) return; // Mobile uses setupMobile()
 
     this.fullscreenMode = true;
 
-    // Set canvas to window size
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
-    this.canvas.style.position = 'fixed';
-    this.canvas.style.left = '0';
-    this.canvas.style.top = '0';
-    this.canvas.style.width = '100vw';
-    this.canvas.style.height = '100vh';
-
-    // Hide body overflow
-    document.body.style.margin = '0';
+    document.body.style.margin   = '0';
+    document.body.style.padding  = '0';
     document.body.style.overflow = 'hidden';
 
-    // Use full canvas dimensions for game
-    this.width = this.canvas.width;
-    this.height = this.canvas.height;
+    this.canvas.style.position = 'fixed';
+    this.canvas.style.left     = '0';
+    this.canvas.style.top      = '0';
+    this.canvas.style.width    = '100vw';
+    this.canvas.style.height   = '100vh';
+    this.canvas.style.display  = 'block';
 
-    // Sprite scale: bigger enemies on bigger monitors
-    // 750px → 1.0×,  1366px → 1.82×,  1920px → 2.5× (capped)
-    Game.spriteScale = Math.min(2.0, Math.max(1.0, this.width / 750));
-
-    // Handle resize
     var self = this;
-    window.addEventListener('resize', function() {
-      self.canvas.width = window.innerWidth;
+    function resize() {
+      self.canvas.width  = window.innerWidth;
       self.canvas.height = window.innerHeight;
-      self.width = self.canvas.width;
+      self.width  = self.canvas.width;
       self.height = self.canvas.height;
-      Game.spriteScale = Math.min(2.0, Math.max(1.0, self.width / 750));
-    });
+      Game.uiScale     = Math.min(self.width / 1280, self.height / 720);
+      Game.spriteScale = Math.min(2.5, Math.max(1.0, self.width / 750));
+    }
+
+    resize();
+    window.addEventListener('resize', resize);
   };
   
 
@@ -188,14 +180,28 @@ var Game = new function() {
 
     // Mouse position tracking: only update when pointer lock is active (prevents jump on lock transitions)
     this.mouseX = Game.width / 2;
+    // Cache _scale so getBoundingClientRect isn't called on every mousemove event
+    var _mouseScale = 1;
+    var _updateMouseScale = function() {
+      var rect = Game.canvas.getBoundingClientRect();
+      _mouseScale = rect.width > 0 ? Game.width / rect.width : 1;
+    };
+    window.addEventListener('resize', _updateMouseScale, false);
+    // Skip first few mousemove events after pointer lock state changes — Chrome often reports
+    // a large spurious movementX on the very first event after lock is acquired/released,
+    // which would cause the ship to lurch suddenly.
+    var _skipMouseMoves = 0;
     this.canvas.addEventListener('mousemove',function(e) {
       var _locked = document.pointerLockElement === Game.canvas ||
                     document.mozPointerLockElement === Game.canvas ||
                     document.webkitPointerLockElement === Game.canvas;
       if(_locked) {
-        var rect = Game.canvas.getBoundingClientRect();
-        var _scale = rect.width > 0 ? Game.width / rect.width : 1;
-        Game.mouseX = Math.max(0, Math.min(Game.width, Game.mouseX + e.movementX * _scale));
+        if(_skipMouseMoves > 0) { _skipMouseMoves--; return; }
+        // Clamp per-event delta to 80 logical px — prevents a single fast swipe from
+        // jumping Game.mouseX to the screen edge and causing the ship to lurch.
+        var _rawDelta = e.movementX * _mouseScale;
+        var _clampedDelta = _rawDelta > 80 ? 80 : _rawDelta < -80 ? -80 : _rawDelta;
+        Game.mouseX = Math.max(0, Math.min(Game.width, Game.mouseX + _clampedDelta));
       }
       // When NOT locked: keep Game.mouseX frozen so ship doesn't jump when lock transitions
     },false);
@@ -219,10 +225,12 @@ var Game = new function() {
                     document.mozPointerLockElement === Game.canvas ||
                     document.webkitPointerLockElement === Game.canvas;
       if(!_locked && Game.playing && !Game.shipSelectOpen) Game.paused = true;
+      if(_locked) _skipMouseMoves = 3; // discard first 3 events after re-lock (spurious large movementX)
     }, false);
     document.addEventListener('mozpointerlockchange', function() {
       var _locked = document.mozPointerLockElement === Game.canvas;
       if(!_locked && Game.playing && !Game.shipSelectOpen) Game.paused = true;
+      if(_locked) _skipMouseMoves = 3;
     }, false);
 
     // Left click = fire
@@ -252,11 +260,11 @@ var Game = new function() {
   };
 
 
-  var lastTime = new Date().getTime();
+  var lastTime = performance.now();
   var maxTime = 1/30;
   // Game Loop
   this.loop = function() {
-    var curTime = new Date().getTime();
+    var curTime = performance.now();
     requestAnimationFrame(Game.loop);
     var dt = (curTime - lastTime)/1000;
     if(dt > maxTime) { dt = maxTime; }
@@ -279,10 +287,11 @@ var Game = new function() {
     Game.ctx.save();
     if(shakeX !== 0 || shakeY !== 0) Game.ctx.translate(shakeX, shakeY);
 
-    for(var i=0,len = boards.length;i<len;i++) {
-      if(boards[i]) {
-        if(!Game.paused) boards[i].step(dt);
-        boards[i].draw(Game.ctx);
+    for(var i=0,len=_boardKeys.length;i<len;i++) {
+      var _b = boards[_boardKeys[i]];
+      if(_b) {
+        if(!Game.paused) _b.step(dt);
+        _b.draw(Game.ctx);
       }
     }
 
@@ -311,8 +320,11 @@ var Game = new function() {
     lastTime = curTime;
   };
   
-  // Change an active game board
-  this.setBoard = function(num,board) { boards[num] = board; };
+  // Change an active game board — rebuilds sorted key list to support fractional slots
+  this.setBoard = function(num, board) {
+    boards[num] = board;
+    _boardKeys = Object.keys(boards).map(Number).sort(function(a,b){ return a-b; });
+  };
 
 
   this.setupMobile = function() {
@@ -676,7 +688,6 @@ var SpriteSheet = new function() {
           }
         };
         img.onerror = function() {
-          console.log('Failed to load image: ' + file);
           loadedCount++;
           if(progressCallback) progressCallback(loadedCount / totalImages);
           if(loadedCount === totalImages && callback) {
@@ -701,17 +712,15 @@ var SpriteSheet = new function() {
     if(!img) return; // Image not loaded yet
 
     if(s.file) {
-      // Individual image file: draw the ENTIRE image scaled to the sprite size
-      ctx.drawImage(img,
-                       Math.floor(x), Math.floor(y),
-                       w, h);
+      // Individual image file: draw at exact float coords for smooth sub-pixel rendering
+      ctx.drawImage(img, x, y, w, h);
     } else {
       // Spritesheet: crop from the sheet
       ctx.drawImage(img,
                        s.sx + frame * s.w,
                        s.sy,
                        s.w, s.h,
-                       Math.floor(x), Math.floor(y),
+                       x, y,
                        w, h);
     }
   };
@@ -719,35 +728,65 @@ var SpriteSheet = new function() {
   return this;
 };
 
-var TitleScreen = function TitleScreen(title,subtitle,callback) {
+var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
   var up = false;
   var t = 0;
-  // Floating energy particles for atmosphere
-  var particles = [];
-  for(var i = 0; i < 45; i++) {
-    particles.push({
-      x: Math.random() * (Game.width || 800),
-      y: Math.random() * (Game.height || 600),
-      vx: (Math.random() - 0.5) * 22,
-      vy: -(4 + Math.random() * 18),
-      size: 0.8 + Math.random() * 2.2,
-      alpha: 0.3 + Math.random() * 0.6,
-      color: ['#00FFFF','#FF44FF','#FFFF44','#FF8800','#00FF88','#FF4466'][Math.floor(Math.random() * 6)]
-    });
+  opts = opts || {};
+  var fadeIn = opts.fadeIn === true;
+  var fadeInAlpha = fadeIn ? 1 : 0;
+  var fadeInDuration = (typeof opts.fadeInDuration === 'number' && opts.fadeInDuration > 0) ? opts.fadeInDuration : 1.0;
+  var duration = opts.duration;       // αν ορισμένο, η οθόνη κρατά τόσο δευτ. και εμφανίζεται γραμμή προόδου
+  var showProgressBar = opts.showProgressBar === true && typeof duration === 'number' && duration > 0;
+  var done = false;
+
+  // Title figures — transparent PNG ladies, shown left & right, changing every 6 seconds
+  // Use _DEMONIK_FILES/_DEMONIK_DIR from game.js (available at runtime); fall back to fig_06/07
+  var _figFileList = (typeof _DEMONIK_FILES !== 'undefined' && _DEMONIK_FILES.length > 0)
+    ? _DEMONIK_FILES
+    : ['fig_06.webp', 'fig_07.webp'];
+  var _figDir = (typeof _DEMONIK_DIR !== 'undefined') ? _DEMONIK_DIR : 'images/title_figures/';
+  var _figCount = _figFileList.length;
+  var _figs = [];
+  for(var _fi = 0; _fi < _figCount; _fi++) {
+    var _img = new Image();
+    _img.src = _figDir + _figFileList[_fi];
+    _figs.push(_img);
   }
+  // Left and right start at different offsets so they're never the same image
+  var _figTimerL = 0, _figTimerR = 0;
+  var _figIdxL = 0, _figIdxR = Math.floor(_figCount / 2);
+  var _figFadeL = 1, _figFadeR = 1;  // fade alpha for transitions
+  var _FIG_INTERVAL = 6.0; // seconds between figure changes
+
 
   this.step = function(dt) {
     t += dt;
-    if(!Game.keys['fire']) up = true;
-    if(up && Game.keys['fire'] && callback) callback();
-    for(var i = 0; i < particles.length; i++) {
-      var p = particles[i];
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      if(p.y < -6) { p.y = Game.height + 6; p.x = Math.random() * Game.width; }
-      if(p.x < 0) p.x = Game.width;
-      if(p.x > Game.width) p.x = 0;
+    if(fadeIn && fadeInAlpha > 0) {
+      fadeInAlpha -= dt / fadeInDuration;
+      if(fadeInAlpha < 0) fadeInAlpha = 0;
     }
+    if(showProgressBar && duration) {
+      if(t >= duration && !done) { done = true; if(callback) callback(); return; }
+      return; // progress bar active — fire key cannot skip
+    }
+    if(!Game.keys['fire']) up = true;
+    if(up && Game.keys['fire'] && callback && !done) { done = true; callback(); }
+
+    // Rotate left figure every _FIG_INTERVAL seconds
+    _figTimerL += dt;
+    if(_figTimerL >= _FIG_INTERVAL) {
+      _figTimerL = 0;
+      _figIdxL = (_figIdxL + 1) % _figCount;
+    }
+    // Right figure cycles at a different pace (offset by half interval)
+    _figTimerR += dt;
+    if(_figTimerR >= _FIG_INTERVAL) {
+      _figTimerR = 0;
+      _figIdxR = (_figIdxR + 1) % _figCount;
+    }
+    // Keep them different
+    if(_figIdxL === _figIdxR) _figIdxR = (_figIdxR + 1) % _figCount;
+
   };
 
   this.draw = function(ctx) {
@@ -755,107 +794,200 @@ var TitleScreen = function TitleScreen(title,subtitle,callback) {
     ctx.fillStyle = 'rgba(0,0,18,0.40)';
     ctx.fillRect(0, 0, Game.width, Game.height);
 
-    // Animated energy particles
-    ctx.save();
-    for(var i = 0; i < particles.length; i++) {
-      var p = particles[i];
-      var flicker = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.7 + i * 0.9));
-      ctx.globalAlpha = p.alpha * flicker;
-      ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
+    // Center spotlight: bright center, darker sides where figures stand
+    var _spot = ctx.createRadialGradient(
+      Game.width * 0.5, Game.height * 0.48, Game.width * 0.06,
+      Game.width * 0.5, Game.height * 0.48, Game.width * 0.72
+    );
+    _spot.addColorStop(0,    'rgba(255,240,200,0.07)'); // warm glow at center
+    _spot.addColorStop(0.35, 'rgba(0,0,0,0)');
+    _spot.addColorStop(0.70, 'rgba(0,0,10,0.38)');
+    _spot.addColorStop(1,    'rgba(0,0,10,0.72)');      // dark at far edges/figures
+    ctx.fillStyle = _spot;
+    ctx.fillRect(0, 0, Game.width, Game.height);
 
-    // ---- Title text with multi-layer glow ----
-    var titleSize = Math.max(30, Math.floor(Game.width / 9));
-    var titleY = Game.height * 0.42;
+    // ---- Figures: left and right, rotating every 6 seconds ----
+    var _figH = Math.round(Game.height * 0.80);
+    function _drawFig(img, side) {
+      if(!img || !img.complete || !img.naturalWidth) return;
+      var _fw = Math.round(_figH * (img.naturalWidth / img.naturalHeight));
+      // Show 85% of figure width, capped at 32% of screen — more toward center
+      var _vis = Math.min(Math.round(_fw * 0.85), Math.round(Game.width * 0.32)) + 20;
+      var _figY = Game.height;
+      // Draw the figure (no dark vignette — images are transparent PNGs)
+      ctx.save();
+      ctx.globalAlpha = 0.97;
+      if(side === 'left') {
+        ctx.translate(_vis, Game.height - _figH);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, 0, 0, _fw, _figH);
+      } else {
+        ctx.drawImage(img, Game.width - _vis, Game.height - _figH, _fw, _figH);
+      }
+      ctx.restore();
+    }
+    _drawFig(_figs[_figIdxL], 'left');
+    _drawFig(_figs[_figIdxR], 'right');
+
+    // ---- Title text with multi-layer glow + gentle scale flash ----
+    var _tsSzMult = (opts.titleSizeScale !== undefined) ? opts.titleSizeScale : 1.0;
+    var titleSize = Math.round(Math.min(58, Math.max(24, Math.floor(Game.width / 13))) * _tsSzMult);
+    // Centred vertically — between the figures' shoulder and knee zone
+    var titleY = (opts.titleY !== undefined) ? opts.titleY : Game.height * 0.65;
     var pulse = 0.72 + 0.28 * Math.sin(t * 2.3);
+    // Scale pulse — amplitude can be overridden per screen
+    var _tsAmp = (opts.titleScaleAmplitude !== undefined) ? opts.titleScaleAmplitude : 0.10;
+    var titleScale = 1.0 + _tsAmp * Math.sin(t * 2.3);
+
+    // Color cycling — 2s hold per color, 0.5s crossfade
+    var _titleColors = [
+      { text: '#FFFFFF', glow: '#00AAFF', mid: '#66CCFF', outer: '#0088CC' },
+      { text: '#FFD700', glow: '#FF8800', mid: '#FFCC44', outer: '#AA5500' },
+      { text: '#00FFFF', glow: '#0088FF', mid: '#44DDFF', outer: '#005599' },
+      { text: '#FF44FF', glow: '#AA00FF', mid: '#FF88FF', outer: '#660099' },
+      { text: '#44FF88', glow: '#00CC44', mid: '#88FFCC', outer: '#006622' },
+      { text: '#FF8844', glow: '#FF2200', mid: '#FFBB66', outer: '#991100' },
+    ];
+    var _tcLen = _titleColors.length;
+    var _tcTotal = 2.5; // 2s hold + 0.5s fade
+    var _tcPhase = (t % (_tcTotal * _tcLen)) / _tcTotal;
+    var _tcIdx  = Math.floor(_tcPhase) % _tcLen;
+    var _tcNext = (_tcIdx + 1) % _tcLen;
+    var _tcFrac = _tcPhase - Math.floor(_tcPhase);
+    var _tcBlend = _tcFrac < 0.8 ? 0 : (_tcFrac - 0.8) / 0.2; // 0→1 during last 0.5s
+    var _tcA = _titleColors[_tcIdx];
+    var _tcB = _titleColors[_tcNext];
 
     ctx.save();
     ctx.font = 'bold ' + titleSize + 'px Uncial Antiqua, Arial Black, Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.translate(Game.width / 2, titleY);
+    ctx.scale(titleScale, titleScale);
 
     // Outermost wide glow
-    ctx.globalAlpha = 0.28 * pulse;
-    ctx.shadowColor = '#00AAFF';
-    ctx.shadowBlur = 60;
-    ctx.fillStyle = '#0088CC';
-    ctx.fillText(title, Game.width / 2, titleY);
+    ctx.globalAlpha = 0.28 * pulse * (1 - _tcBlend);
+    ctx.shadowColor = _tcA.glow; ctx.shadowBlur = 60;
+    ctx.fillStyle = _tcA.outer;
+    ctx.fillText(title, 0, 0);
+    if(_tcBlend > 0) {
+      ctx.globalAlpha = 0.28 * pulse * _tcBlend;
+      ctx.shadowColor = _tcB.glow;
+      ctx.fillStyle = _tcB.outer;
+      ctx.fillText(title, 0, 0);
+    }
 
     // Mid glow
-    ctx.globalAlpha = 0.6;
+    ctx.globalAlpha = 0.6 * (1 - _tcBlend);
     ctx.shadowBlur = 28 * pulse;
-    ctx.fillStyle = '#66CCFF';
-    ctx.fillText(title, Game.width / 2, titleY);
+    ctx.shadowColor = _tcA.glow;
+    ctx.fillStyle = _tcA.mid;
+    ctx.fillText(title, 0, 0);
+    if(_tcBlend > 0) {
+      ctx.globalAlpha = 0.6 * _tcBlend;
+      ctx.shadowColor = _tcB.glow;
+      ctx.fillStyle = _tcB.mid;
+      ctx.fillText(title, 0, 0);
+    }
 
     // Solid bright text
-    ctx.globalAlpha = 1;
     ctx.shadowBlur = 8;
-    ctx.shadowColor = '#AADDFF';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(title, Game.width / 2, titleY);
-    ctx.restore();
-
-    // ---- Subtitle pulsing ----
-    var subSize = Math.max(13, Math.floor(Game.width / 28));
-    var subPulse = 0.45 + 0.55 * Math.sin(t * 3.6);
-    ctx.save();
-    ctx.font = 'bold ' + subSize + 'px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.globalAlpha = 0.55 + 0.45 * subPulse;
-    ctx.shadowColor = '#FFFF00';
-    ctx.shadowBlur = 14 * subPulse;
-    ctx.fillStyle = '#FFFF55';
-    var _subLines = Array.isArray(subtitle) ? subtitle : [subtitle];
-    for(var _sl = 0; _sl < _subLines.length; _sl++) {
-      ctx.fillText(_subLines[_sl], Game.width / 2, titleY + titleSize * (1.35 + _sl * 0.70));
+    ctx.globalAlpha = 1 - _tcBlend;
+    ctx.shadowColor = _tcA.glow;
+    ctx.fillStyle = _tcA.text;
+    ctx.fillText(title, 0, 0);
+    if(_tcBlend > 0) {
+      ctx.globalAlpha = _tcBlend;
+      ctx.shadowColor = _tcB.glow;
+      ctx.fillStyle = _tcB.text;
+      ctx.fillText(title, 0, 0);
     }
     ctx.restore();
 
-    // ---- Author / copyright — just below the subtitle ----
-    var creditFade = 0.55 + 0.2 * Math.sin(t * 1.1);
-    var creditY = titleY + titleSize * 2.1;
+    // ---- Subtitle (σταθερό, χωρίς flashing/scale) ----
+    var subSize = Math.max(11, Math.floor(Game.width / 38));
+    // First subtitle line: below title bottom + comfortable gap
+    var _subY0 = titleY + titleSize * 0.5 + subSize + 18;
+    ctx.save();
+    ctx.font = 'bold ' + subSize + 'px Uncial Antiqua, Arial Black, Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 0.9;
+    ctx.shadowColor = '#FFFF00';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#FFFF55';
+    var _subLines = Array.isArray(subtitle) ? subtitle : [subtitle];
+    for(var _sl = 0; _sl < _subLines.length; _sl++) {
+      ctx.fillText(_subLines[_sl], Game.width / 2, _subY0 + _sl * (subSize * 1.5));
+    }
+    ctx.restore();
+
+    // ---- Γραμμή προόδου (όταν duration/showProgressBar) — όπως στα άλλα stages ----
+    var _lastSubY = _subY0 + Math.max(0, _subLines.length - 1) * (subSize * 1.5);
+    if(showProgressBar && duration) {
+      var barH2 = 5;
+      var barW = Math.min(Game.width * 0.50, 260);
+      var barX = (Game.width - barW) / 2;
+      var barY = _lastSubY + subSize + 22;
+      var prog = Math.min(1, t / duration);
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#112233';
+      ctx.fillRect(barX, barY, barW, barH2);
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#00CCFF';
+      ctx.fillRect(barX, barY, barW * prog, barH2);
+      ctx.restore();
+    }
+
+    // ---- Author / copyright — fixed at the very bottom of the screen (σταθερό, χωρίς flashing) ----
+    var creditFade = 0.9;
+    var _cSc = Math.max(0.55, Math.min(1.4, Game.height / 600));
+    var _nameSize  = Math.round(22 * _cSc);
+    var _labelSize = Math.round(14 * _cSc);
+    var _copySize  = Math.round(13 * _cSc);
+    // Slightly tighter vertical gaps and a touch higher for even spacing
+    var _gap       = Math.round(19 * _cSc);
+    var creditY    = Game.height - Math.round(58 * _cSc);
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     // "Created by"
-    ctx.font = 'bold 10px Arial';
-    ctx.globalAlpha = creditFade * 0.70;
+    ctx.font = 'bold ' + _labelSize + 'px Arial';
+    ctx.globalAlpha = creditFade * 0.75;
     ctx.shadowColor = '#88AAFF';
-    ctx.shadowBlur = 5;
+    ctx.shadowBlur = 6;
     ctx.fillStyle = '#AACCFF';
     ctx.fillText('Created by', Game.width / 2, creditY);
 
     // "Georgios Chimonides"
-    ctx.font = 'bold 14px Arial';
+    ctx.font = 'bold ' + _nameSize + 'px Arial';
     ctx.globalAlpha = creditFade;
     ctx.shadowColor = '#AADDFF';
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 16;
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText('Georgios Chimonides', Game.width / 2, creditY + 18);
+    ctx.fillText('Georgios Chimonides', Game.width / 2, creditY + _gap);
 
     // "© 2026  All rights reserved"
-    ctx.font = '9px Arial';
-    ctx.globalAlpha = creditFade * 0.70;
+    ctx.font = _copySize + 'px Arial';
+    ctx.globalAlpha = creditFade * 0.75;
     ctx.shadowColor = '#6688CC';
-    ctx.shadowBlur = 4;
-    ctx.fillStyle = '#8899BB';
-    ctx.fillText('\u00A9 2026  \u2022  All rights reserved', Game.width / 2, creditY + 33);
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = '#99AACC';
+    ctx.fillText('\u00A9 2026  \u2022  All rights reserved', Game.width / 2, creditY + _gap * 2);
     ctx.restore();
+
+    // Μετά τη μεταλλαγή βίντεο: ξεκινάμε από σκοτάδι και δίνουμε φως (fade-in)
+    if(fadeIn && fadeInAlpha > 0) {
+      ctx.fillStyle = 'rgba(0,0,0,' + fadeInAlpha + ')';
+      ctx.fillRect(0, 0, Game.width, Game.height);
+    }
   };
 };
 
 
 var GameBoard = function() {
-  var board = this;
-
   // The current list of objects
   this.objects = [];
   this.cnt = {};
@@ -872,7 +1004,7 @@ var GameBoard = function() {
   // Mark an object for removal
   this.remove = function(obj) { 
     var idx = this.removed.indexOf(obj);
-    if(idx == -1) {
+    if(idx === -1) {
       this.removed.push(obj); 
       return true;
     } else {
@@ -887,7 +1019,7 @@ var GameBoard = function() {
   this.finalizeRemoved = function() {
     for(var i=0,len=this.removed.length;i<len;i++) {
       var idx = this.objects.indexOf(this.removed[i]);
-      if(idx != -1) {
+      if(idx !== -1) {
         this.cnt[this.removed[i].type]--;
         this.objects.splice(idx,1);
       }
@@ -905,7 +1037,7 @@ var GameBoard = function() {
 
   // Find the first object for which func is true
   this.detect = function(func) {
-    for(var i = 0,val=null, len=this.objects.length; i < len; i++) {
+    for(var i = 0, len=this.objects.length; i < len; i++) {
       if(func.call(this.objects[i])) return this.objects[i];
     }
     return false;
@@ -949,7 +1081,7 @@ var GameBoard = function() {
 
     for(var i = 0; i < this.objects.length; i++) {
       var other = this.objects[i];
-      if(obj != other) {
+      if(obj !== other) {
         var typeMatch = !type || (other.type & type);
         if(typeMatch && this.overlap(obj, other)) {
           // Pick the enemy with highest Y (closest to player)
@@ -973,8 +1105,10 @@ Sprite.prototype.setup = function(sprite,props) {
   this.merge(props);
   this.frame = this.frame || 0;
   var _ss = Game.spriteScale || 1.0;
-  this.w = Math.round(SpriteSheet.map[sprite].w * _ss);
-  this.h = Math.round(SpriteSheet.map[sprite].h * _ss);
+  var _sm = SpriteSheet.map[sprite];
+  if(!_sm) { console.error('Sprite.setup: MISSING sprite key:', JSON.stringify(sprite)); this.w = 64; this.h = 64; return; }
+  this.w = Math.round(_sm.w * _ss);
+  this.h = Math.round(_sm.h * _ss);
 };
 
 Sprite.prototype.merge = function(props) {
@@ -1001,6 +1135,7 @@ var Level = function(levelData,callback) {
   }
   this.t = 0;
   this.callback = callback;
+  this.done = false; // fires callback only once
 };
 
 Level.prototype.step = function(dt) {
@@ -1053,6 +1188,10 @@ Level.prototype.step = function(dt) {
         // Spawn an AlienHeadEnemy (portrait alien face, 10 movement patterns)
         this.board.add(new AlienHeadEnemy(override || {}));
         curShip[0] += curShip[2];
+      } else if(type === 'siren_portrait') {
+        // Spawn a SirenPortrait (holo-portrait boss; chains to next portrait on death)
+        this.board.add(new SirenPortrait(override || {}));
+        curShip[0] = curShip[1] + 1; // one-time spawn
       } else {
         // Normal enemy spawn
         var enemy = enemies[type];
@@ -1078,33 +1217,27 @@ Level.prototype.step = function(dt) {
   // Remove any objects from the levelData that have passed
   for(var i=0,len=remove.length;i<len;i++) {
     var remIdx = this.levelData.indexOf(remove[i]);
-    if(remIdx != -1) this.levelData.splice(remIdx,1);
+    if(remIdx !== -1) this.levelData.splice(remIdx,1);
   }
 
-  // If there are no more enemies on the board or in
-  // levelData, this level is done
-  if(this.levelData.length === 0 && this.board.cnt[OBJECT_ENEMY] === 0) {
+  // Advance immediately when all spawns are done AND no enemies remain on screen
+  if(!this.done && this.levelData.length === 0 && this.board.cnt[OBJECT_ENEMY] === 0) {
+    this.done = true;
     if(this.callback) this.callback();
   }
 
 };
 
-Level.prototype.draw = function(ctx) { };
+Level.prototype.draw = function() { };
 
 
 var TouchControls = function() {
 
-  // Control bar at the bottom
-  var ctrlH = 66;
+  // Removed — touch controls are handled by tap/drag gestures directly
+  var ctrlH = 0;
 
-  // Layout: BOMB left, FIRE right — smaller buttons, more screen for drag movement
   function layout() {
-    var cy = Game.height - ctrlH;
-    return {
-      ctrlY:   cy,
-      btnBomb: { x: 10,  y: cy + 5, w: 126, h: ctrlH - 10 },
-      btnFire: { x: 184, y: cy + 5, w: 126, h: ctrlH - 10 }
-    };
+    return { ctrlY: Game.height, btnBomb: { x:0,y:0,w:0,h:0 }, btnFire: { x:0,y:0,w:0,h:0 } };
   }
 
   // Drag tracking for MOVE zone
@@ -1116,11 +1249,16 @@ var TouchControls = function() {
   // Multi-touch tracking for BOMB/FIRE buttons
   var activeTouches = {};
 
+  // Cache canvas rect — updated on resize/orientationchange so canvasPos() doesn't trigger layout every touch
+  var _touchRect = Game.canvas.getBoundingClientRect();
+  var _updateTouchRect = function() { _touchRect = Game.canvas.getBoundingClientRect(); };
+  window.addEventListener('resize', _updateTouchRect, false);
+  window.addEventListener('orientationchange', _updateTouchRect, false);
+
   function canvasPos(touch) {
-    var rect = Game.canvas.getBoundingClientRect();
     return {
-      x: (touch.clientX - rect.left) * (Game.canvas.width  / rect.width),
-      y: (touch.clientY - rect.top)  * (Game.canvas.height / rect.height)
+      x: (touch.clientX - _touchRect.left) * (Game.canvas.width  / _touchRect.width),
+      y: (touch.clientY - _touchRect.top)  * (Game.canvas.height / _touchRect.height)
     };
   }
 
@@ -1193,153 +1331,9 @@ var TouchControls = function() {
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 
-  this.draw = function(ctx) {
-    var L = layout();
-    ctx.save();
+  this.draw = function() {};
 
-    // Dark glass control bar background
-    ctx.fillStyle = 'rgba(0,4,20,0.78)';
-    ctx.fillRect(0, L.ctrlY, Game.width, ctrlH);
-
-    // Glowing separator line
-    ctx.strokeStyle = 'rgba(0,180,255,0.28)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, L.ctrlY);
-    ctx.lineTo(Game.width, L.ctrlY);
-    ctx.stroke();
-
-    drawBtn(ctx, L.btnBomb, '\u2606', 'BOMB', Game.keys['rocket'], '#FF8800');
-    drawBtn(ctx, L.btnFire, '\u25B2', 'FIRE', Game.keys['fire'],   '#00CCFF');
-
-    ctx.restore();
-  };
-
-  function drawMoveZone(ctx, zone) {
-    var x = zone.x, y = zone.y, w = zone.w, h = zone.h;
-    var mx = Game.mobileMoveX || 0;
-    var active = Math.abs(mx) > 0.05;
-    var color = '#3377FF';
-
-    // Background fill
-    ctx.globalAlpha = active ? 0.90 : 0.52;
-    var grad = ctx.createLinearGradient(x, y, x, y + h);
-    if (active) {
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, 'rgba(0,0,10,0.88)');
-    } else {
-      grad.addColorStop(0, 'rgba(18,28,52,0.92)');
-      grad.addColorStop(1, 'rgba(5,10,22,0.92)');
-    }
-    ctx.fillStyle = grad;
-    roundRect(ctx, x, y, w, h, 9);
-    ctx.fill();
-
-    // Border
-    ctx.lineWidth = active ? 2 : 1;
-    ctx.strokeStyle = active ? color : 'rgba(0,140,210,0.32)';
-    if (active) { ctx.shadowColor = color; ctx.shadowBlur = 14; }
-    roundRect(ctx, x, y, w, h, 9);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    var midX = x + w / 2;
-    var cy   = y + h * 0.38;
-    var iconSz = Math.min(h * 0.42, 20);
-    ctx.font = 'bold ' + iconSz + 'px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Left arrow — brightens when moving left
-    ctx.globalAlpha = mx < -0.1 ? 1.0 : 0.40;
-    ctx.fillStyle   = mx < -0.1 ? '#ffffff' : 'rgba(130,175,255,0.70)';
-    if (mx < -0.1) { ctx.shadowColor = color; ctx.shadowBlur = 10; }
-    ctx.fillText('\u25C4', midX - 28, cy);
-    ctx.shadowBlur = 0;
-
-    // Right arrow — brightens when moving right
-    ctx.globalAlpha = mx > 0.1 ? 1.0 : 0.40;
-    ctx.fillStyle   = mx > 0.1 ? '#ffffff' : 'rgba(130,175,255,0.70)';
-    if (mx > 0.1) { ctx.shadowColor = color; ctx.shadowBlur = 10; }
-    ctx.fillText('\u25BA', midX + 28, cy);
-    ctx.shadowBlur = 0;
-
-    // Sliding indicator dot
-    ctx.globalAlpha = active ? 0.85 : 0.35;
-    var dotX = midX + mx * (w * 0.30);
-    ctx.fillStyle = active ? '#44AAFF' : '#223355';
-    ctx.shadowColor = active ? '#44AAFF' : 'transparent';
-    ctx.shadowBlur  = active ? 10 : 0;
-    ctx.beginPath();
-    ctx.arc(dotX, y + h * 0.76, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    // Label
-    ctx.globalAlpha = 0.48;
-    var lblSz = Math.max(7, Math.min(h * 0.18, 10));
-    ctx.font = 'bold ' + lblSz + 'px Arial';
-    ctx.fillStyle = 'rgba(100,160,220,0.65)';
-    ctx.textAlign = 'center';
-    ctx.fillText('MOVE', midX, y + h * 0.80);
-  }
-
-  function drawBtn(ctx, btn, icon, label, active, color) {
-    var x = btn.x, y = btn.y, w = btn.w, h = btn.h;
-
-    ctx.globalAlpha = active ? 0.94 : 0.55;
-
-    var grad = ctx.createLinearGradient(x, y, x, y + h);
-    if (active) {
-      grad.addColorStop(0, color);
-      grad.addColorStop(1, 'rgba(0,0,10,0.88)');
-    } else {
-      grad.addColorStop(0, 'rgba(18,28,52,0.92)');
-      grad.addColorStop(1, 'rgba(5,10,22,0.92)');
-    }
-    ctx.fillStyle = grad;
-    roundRect(ctx, x, y, w, h, 9);
-    ctx.fill();
-
-    ctx.lineWidth = active ? 2 : 1;
-    ctx.strokeStyle = active ? color : 'rgba(0,140,210,0.32)';
-    if (active) { ctx.shadowColor = color; ctx.shadowBlur = 16; }
-    roundRect(ctx, x, y, w, h, 9);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    ctx.globalAlpha = 1.0;
-    ctx.fillStyle = active ? '#ffffff' : 'rgba(150,195,255,0.72)';
-    var iconSz = Math.min(h * 0.46, 22);
-    ctx.font = 'bold ' + iconSz + 'px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    if (active) { ctx.shadowColor = color; ctx.shadowBlur = 9; }
-    ctx.fillText(icon, x + w / 2, y + h * 0.4);
-    ctx.shadowBlur = 0;
-
-    var lblSz = Math.max(7, Math.min(h * 0.19, 11));
-    ctx.font = 'bold ' + lblSz + 'px Arial';
-    ctx.fillStyle = active ? 'rgba(255,255,255,0.88)' : 'rgba(70,120,180,0.68)';
-    ctx.fillText(label, x + w / 2, y + h * 0.79);
-  }
-
-  function roundRect(ctx, x, y, w, h, r) {
-    r = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x + w, y,     x + w, y + r,     r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x,     y + h, x,     y + h - r, r);
-    ctx.lineTo(x, y + r);
-    ctx.arcTo(x,     y,     x + r, y,         r);
-    ctx.closePath();
-  }
-
-  this.step = function(dt) {};
+  this.step = function() {};
 
   var opts = { passive: false, capture: true };
   Game.canvas.addEventListener('touchstart',  this.trackTouch, opts);
@@ -1366,15 +1360,12 @@ var GamePoints = function() {
     var scoreSize = Math.max(14, Math.floor(Game.width / 32));
     ctx.font = 'bold ' + scoreSize + 'px Uncial Antiqua, Bangers, Arial';
     ctx.textAlign = 'left';
-    var txt = '' + Game.points;
-    var zeros = '';
-    var i = pointsLength - txt.length;
-    while(i-- > 0) { zeros += '0'; }
+    var txt = String(Game.points).padStart(pointsLength, '0');
     ctx.shadowColor = '#00FFFF';
     ctx.shadowBlur = 10;
     ctx.fillStyle = '#00FFFF';
-    ctx.fillText(zeros + txt, 10, 8);
-    var scoreTextWidth = ctx.measureText(zeros + txt).width;
+    ctx.fillText(txt, 10, 8);
+    var scoreTextWidth = ctx.measureText(txt).width;
 
     // High score - LEFT side, below score
     var hiSize = Math.max(9, Math.floor(Game.width / 55));
