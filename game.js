@@ -8503,6 +8503,20 @@ var _transitionFrameFiles = [
 ];
 
 
+// Φωτογραφίες από "files tou kosmou" — αριστερά και δεξιά στο LevelTransitionScreen
+var _filesTouKosmouDir = "images/files tou kosmou/";
+var _filesTouKosmouFiles = [
+  "Remove_background-1772099027122.webp", "Remove_background-1772099230817.webp", "Remove_background-1772099237502.webp", "Remove_background-1772099502809.webp", "Remove_background-1772099507978.webp", "Remove_background-1772099512489.webp", "Remove_background-1772099517002.webp", "Remove_background-1772099520677.webp", "Remove_background-1772099524629.webp", "Remove_background-1772099529279.webp",
+  "Remove_background-1772099789657.webp", "Remove_background-1772099796270.webp", "Remove_background-1772099804255.webp", "Remove_background-1772099809829.webp", "Remove_background-1772099814201.webp", "Remove_background-1772099818894.webp", "Remove_background-1772099821912.webp", "Remove_background-1772099825634.webp", "Remove_background-1772100210482.webp", "Remove_background-1772100215505.webp",
+  "Remove_background-1772100220558.webp", "Remove_background-1772100227567.webp", "Remove_background-1772100440660.webp", "Remove_background-1772100445591.webp", "Remove_background-1772100450286.webp", "Remove_background-1772100455176.webp", "Remove_background-1772100460092.webp", "Remove_background-1772100464893.webp", "Remove_background-1772100557231.webp", "Remove_background-1772100562597.webp",
+  "Remove_background-1772100566961.webp", "Remove_background-1772100572130.webp", "Remove_background-1772100921478.webp", "Remove_background-1772100927200.webp", "Remove_background-1772100992253.webp", "Remove_background-1772101098828.webp", "Remove_background-1772101150839.webp", "Remove_background-1772101432358.webp", "Remove_background-1772101436362.webp", "Remove_background-1772101441680.webp",
+  "Remove_background-1772101446194.webp", "Remove_background-1772101450096.webp", "Remove_background-1772101454431.webp", "Remove_background-1772101462640.webp", "Remove_background-1772101469211.webp", "Remove_background-1772101473863.webp", "Remove_background-1772118866404.webp", "Remove_background-1772118953277.webp", "Remove_background-1772120725451.webp", "Remove_background-1772120934960.webp",
+  "Remove_background-1772120939211.webp", "Remove_background-1772120944814.webp", "Remove_background-1772120951330.webp", "Remove_background-1772120957181.webp", "Remove_background-1772120962465.webp", "Remove_background-1772120967411.webp", "Remove_background-1772120973331.webp", "Remove_background-1772122849476.webp", "Remove_background-1772122854880.webp", "Remove_background-1772122859744.webp",
+  "Remove_background-1772122864978.webp", "Remove_background-1772122868929.webp", "Remove_background-1772122873263.webp", "Remove_background-1772122877011.webp", "Remove_background-1772122889565.webp", "Remove_background-1772122893512.webp", "Remove_background-1772122898463.webp", "Remove_background-1772122903513.webp", "Remove_background-1772122908984.webp", "Remove_background-1772122912580.webp",
+  "Remove_background-1772122917415.webp", "Remove_background-1772122920932.webp", "Remove_background-1772122926181.webp", "Remove_background-1772122930515.webp", "Remove_background-1772122936999.webp", "Remove_background-1772122941768.webp", "Remove_background-1772122946396.webp", "Remove_background-1772122950621.webp", "Remove_background-1772122954817.webp", "Remove_background-1772122958648.webp",
+  "Remove_background-1772122962882.webp", "Remove_background-1772122967768.webp", "Remove_background-1772122972052.webp", "Remove_background-1772122975964.webp", "Remove_background-1772122980319.webp"
+];
+
 var LevelTransitionScreen = function(fromLevel, toLevel, callback, previewPool) {
   var t = 0;
   var duration = 3.0;
@@ -8534,7 +8548,19 @@ var LevelTransitionScreen = function(fromLevel, toLevel, callback, previewPool) 
   frameImg.onload = function() { frameLoaded = true; };
   frameImg.src = frameFile;
 
-  // (Side figures removed from transition screen)
+  // Φιγούρες αριστερά/δεξιά — κρύβονται μόνο σε μόνιτορ 14" και κάτω (πλάτος < 1280px)
+  var _kosmouLen = _filesTouKosmouFiles.length;
+  var _kosmouIdxL = Math.floor(Math.random() * _kosmouLen);
+  var _kosmouIdxR = _kosmouLen > 1
+    ? (_kosmouIdxL + 1 + Math.floor(Math.random() * (_kosmouLen - 1))) % _kosmouLen
+    : _kosmouIdxL;
+  var kosmouImgL = new Image();
+  var kosmouImgR = new Image();
+  var kosmouLoadedL = false, kosmouLoadedR = false;
+  kosmouImgL.onload = function() { kosmouLoadedL = true; };
+  kosmouImgR.onload = function() { kosmouLoadedR = true; };
+  kosmouImgL.src = _filesTouKosmouDir + _filesTouKosmouFiles[_kosmouIdxL];
+  kosmouImgR.src = _filesTouKosmouDir + _filesTouKosmouFiles[_kosmouIdxR];
 
   // Pick 7 unique random enemies from all pools — different every time
   var _rowEnemies = [];
@@ -8660,8 +8686,26 @@ var LevelTransitionScreen = function(fromLevel, toLevel, callback, previewPool) 
       }
     }
 
+    // Φιγούρες αριστερά & δεξιά — εμφανίζονται μόνο σε μόνιτορ > 14" (πλάτος >= 1280px)
+    var figWL = 0, figWR = 0;
+    if(w >= 1280) {
+      var figH = h * 0.82;
+      var figY = h - figH;
+      if(kosmouLoadedL) {
+        figWL = figH * (kosmouImgL.naturalWidth / Math.max(1, kosmouImgL.naturalHeight));
+        ctx.save(); ctx.globalAlpha = 1.0;
+        ctx.drawImage(kosmouImgL, 0, figY, figWL, figH);
+        ctx.restore();
+      }
+      if(kosmouLoadedR) {
+        figWR = figH * (kosmouImgR.naturalWidth / Math.max(1, kosmouImgR.naturalHeight));
+        ctx.save(); ctx.globalAlpha = 1.0;
+        ctx.drawImage(kosmouImgR, w - figWR, figY, figWR, figH);
+        ctx.restore();
+      }
+    }
+
     // Enemy preview columns — centered in the gap on each side of the central frame
-    var figWL = 0, figWR = 0; // no side figures
     if(_prevSprites.length > 0 && SpriteSheet && SpriteSheet.map) {
       var _sprSz   = Math.round(Math.min(h * 0.10, w * 0.08));
       var _colGapY = Math.round(_sprSz * 0.20);
