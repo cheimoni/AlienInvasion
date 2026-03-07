@@ -8575,10 +8575,10 @@ var LevelTransitionScreen = function(fromLevel, toLevel, callback, previewPool) 
     var subSize   = Math.max(10, Math.min(Math.floor(h * 0.032), 40));
     var lineGap   = titleSize * 0.22; // tight gap between lines
 
-    // Center the whole group vertically on screen
+    // Group lower on screen — near the girls' knees
     var barH2 = 5;
     var totalGroupH = titleSize + lineGap + subSize + lineGap + barH2 + 4;
-    var groupTopY  = h * 0.5 - totalGroupH / 2;
+    var groupTopY  = h * 0.75 - totalGroupH / 2;
     var titleY     = groupTopY + titleSize * 0.5;
     var subY       = titleY + titleSize * 0.5 + lineGap + subSize * 0.5;
     var barBottomY = subY + subSize * 0.5 + lineGap + barH2;
