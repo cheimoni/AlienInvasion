@@ -955,7 +955,7 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
 
     // ---- Row of 7 random enemies below subtitle/bar ----
     if(_tsRowEnemies.length > 0 && typeof SpriteSheet !== 'undefined' && SpriteSheet && SpriteSheet.map) {
-      var _rSz  = Math.round(Math.min(Game.height * 0.098, Game.width / 7.1, 73));
+      var _rSz  = Math.round(Math.min(Game.height * 0.157, Game.width / 4.4, 117));
       var _rGap = Math.round(_rSz * 0.40);
       var _rTotalW = _tsRowEnemies.length * _rSz + (_tsRowEnemies.length - 1) * _rGap;
       var _rStartX = (Game.width - _rTotalW) / 2;
