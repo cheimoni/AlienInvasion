@@ -8536,6 +8536,18 @@ var LevelTransitionScreen = function(fromLevel, toLevel, callback, previewPool) 
 
   // (Side figures removed from transition screen)
 
+  // Pick 7 unique random enemies from all pools — different every time
+  var _rowEnemies = [];
+  var _rp = _getMorphSpritePool().slice();
+  for(var _ri = _rp.length - 1; _ri > 0; _ri--) {
+    var _rj = Math.floor(Math.random() * (_ri + 1));
+    var _rt = _rp[_ri]; _rp[_ri] = _rp[_rj]; _rp[_rj] = _rt;
+  }
+  var _rseen = {};
+  for(var _ri2 = 0; _ri2 < _rp.length && _rowEnemies.length < 7; _ri2++) {
+    if(!_rseen[_rp[_ri2]]) { _rseen[_rp[_ri2]] = true; _rowEnemies.push(_rp[_ri2]); }
+  }
+
   this.step = function(dt) {
     if(done) return;
     t += dt;
@@ -8626,6 +8638,27 @@ var LevelTransitionScreen = function(fromLevel, toLevel, callback, previewPool) 
     ctx.fillStyle = '#00CCFF';
     ctx.fillRect(barX, barY, barW * prog, barH2);
     ctx.restore();
+
+    // Row of 7 random enemies below the text group
+    if(_rowEnemies.length > 0 && SpriteSheet && SpriteSheet.map) {
+      var _rSz  = Math.round(Math.min(h * 0.07, w / 10, 52));
+      var _rGap = Math.round(_rSz * 0.40);
+      var _rTotalW = _rowEnemies.length * _rSz + (_rowEnemies.length - 1) * _rGap;
+      var _rStartX = (w - _rTotalW) / 2;
+      var _rY = barBottomY + _rSz * 0.5 + 18;
+      for(var _rei = 0; _rei < _rowEnemies.length; _rei++) {
+        var _re = _rowEnemies[_rei];
+        if(!SpriteSheet.map[_re]) continue;
+        var _rx = _rStartX + _rei * (_rSz + _rGap);
+        var _rg = 0.70 + 0.25 * Math.sin(t * 1.6 + _rei * 0.9);
+        ctx.save();
+        ctx.globalAlpha = _rg;
+        ctx.shadowColor = '#FFAACC';
+        ctx.shadowBlur = 14;
+        SpriteSheet.draw(ctx, _re, _rx, _rY - _rSz * 0.5, 0, _rSz, _rSz);
+        ctx.restore();
+      }
+    }
 
     // Enemy preview columns — centered in the gap on each side of the central frame
     var figWL = 0, figWR = 0; // no side figures
