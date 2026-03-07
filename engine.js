@@ -758,6 +758,19 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
   var _figFadeL = 1, _figFadeR = 1;  // fade alpha for transitions
   var _FIG_INTERVAL = 6.0; // seconds between figure changes
 
+  // Pick 7 unique random enemies for the row below the text
+  var _tsRowEnemies = [];
+  if(typeof _getMorphSpritePool === 'function') {
+    var _tsp = _getMorphSpritePool().slice();
+    for(var _tri = _tsp.length - 1; _tri > 0; _tri--) {
+      var _trj = Math.floor(Math.random() * (_tri + 1));
+      var _trt = _tsp[_tri]; _tsp[_tri] = _tsp[_trj]; _tsp[_trj] = _trt;
+    }
+    var _trseen = {};
+    for(var _tri2 = 0; _tri2 < _tsp.length && _tsRowEnemies.length < 7; _tri2++) {
+      if(!_trseen[_tsp[_tri2]]) { _trseen[_tsp[_tri2]] = true; _tsRowEnemies.push(_tsp[_tri2]); }
+    }
+  }
 
   this.step = function(dt) {
     t += dt;
@@ -906,8 +919,8 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
 
     // ---- Subtitle (σταθερό, χωρίς flashing/scale) ----
     var subSize = Math.max(11, Math.floor(Game.width / 38));
-    // First subtitle line: below title bottom + comfortable gap
-    var _subY0 = titleY + titleSize * 0.5 + subSize + 18;
+    // First subtitle line: below title bottom + comfortable gap + 50px extra
+    var _subY0 = titleY + titleSize * 0.5 + subSize + 18 + 50;
     ctx.save();
     ctx.font = 'bold ' + subSize + 'px Uncial Antiqua, Arial Black, Arial';
     ctx.textAlign = 'center';
@@ -938,6 +951,28 @@ var TitleScreen = function TitleScreen(title,subtitle,callback,opts) {
       ctx.fillStyle = '#00CCFF';
       ctx.fillRect(barX, barY, barW * prog, barH2);
       ctx.restore();
+    }
+
+    // ---- Row of 7 random enemies below subtitle/bar ----
+    if(_tsRowEnemies.length > 0 && typeof SpriteSheet !== 'undefined' && SpriteSheet && SpriteSheet.map) {
+      var _rSz  = Math.round(Math.min(Game.height * 0.07, Game.width / 10, 52));
+      var _rGap = Math.round(_rSz * 0.40);
+      var _rTotalW = _tsRowEnemies.length * _rSz + (_tsRowEnemies.length - 1) * _rGap;
+      var _rStartX = (Game.width - _rTotalW) / 2;
+      var _rBaseY  = _lastSubY + subSize + (showProgressBar ? 42 : 18);
+      var _rY = _rBaseY + _rSz * 0.5;
+      for(var _rei = 0; _rei < _tsRowEnemies.length; _rei++) {
+        var _re = _tsRowEnemies[_rei];
+        if(!SpriteSheet.map[_re]) continue;
+        var _rx = _rStartX + _rei * (_rSz + _rGap);
+        var _rg = 0.70 + 0.25 * Math.sin(t * 1.6 + _rei * 0.9);
+        ctx.save();
+        ctx.globalAlpha = _rg;
+        ctx.shadowColor = '#FFAACC';
+        ctx.shadowBlur = 14;
+        SpriteSheet.draw(ctx, _re, _rx, _rY - _rSz * 0.5, 0, _rSz, _rSz);
+        ctx.restore();
+      }
     }
 
     // ---- Author / copyright — fixed at the very bottom of the screen (σταθερό, χωρίς flashing) ----
